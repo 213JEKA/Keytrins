@@ -17,7 +17,7 @@ public final class SettingsStore {
         public String apiKey, apiSecret;
         public boolean testnet, live;
         public double riskUsdt, minTurnoverUsdt, maxNotionalUsdt, maxCostR, defaultTakerFee;
-        public int universeSize, leverage;
+        public int universeSize, leverage, minAgeDays;
         public double adxMin, atrSlMult, reduceTriggerR, forceReduceR, reduceFraction, beTriggerR, trailTriggerR, trailAtrMult;
         public int h1EmaFast, h1EmaSlow, h1SlopeBars, m15EmaFast, m15EmaSlow, pullbackLookback, atrPeriod, swingLookback;
     }
@@ -31,6 +31,7 @@ public final class SettingsStore {
         s.riskUsdt = d("riskUsdt", 3.0);
         s.universeSize = i("universeSize", 30);
         s.minTurnoverUsdt = d("minTurnoverUsdt", 5_000_000.0);
+        s.minAgeDays = i("minAgeDays", 30);
         s.leverage = i("leverage", 5);
         s.maxNotionalUsdt = d("maxNotionalUsdt", 1000.0);
         s.maxCostR = d("maxCostR", 0.25);
@@ -59,10 +60,23 @@ public final class SettingsStore {
         vault.put("apiSecret", secret == null ? "" : secret.trim());
     }
 
-    public void saveBasic(boolean testnet, boolean live, double risk, int universe) {
-        p.edit().putBoolean("testnet", testnet).putBoolean("live", live)
-                .putString("riskUsdt", Double.toString(risk))
+    public void saveConnection(boolean testnet) {
+        p.edit().putBoolean("testnet", testnet).apply();
+    }
+
+    public void saveLive(boolean live) {
+        p.edit().putBoolean("live", live).apply();
+    }
+
+    public void saveStrategy(double risk, int universe) {
+        p.edit().putString("riskUsdt", Double.toString(risk))
                 .putInt("universeSize", universe).apply();
+    }
+
+    public void saveBasic(boolean testnet, boolean live, double risk, int universe) {
+        saveConnection(testnet);
+        saveLive(live);
+        saveStrategy(risk, universe);
     }
 
     private double d(String k, double def) {
