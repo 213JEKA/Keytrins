@@ -6,6 +6,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
+import com.keytrins.liveresearch.BotRuntime;
 import com.keytrins.liveresearch.model.Signal;
 import com.keytrins.liveresearch.model.TradeState;
 
@@ -61,6 +62,7 @@ public final class Db extends SQLiteOpenHelper {
         v.put("signal_time", sig == null ? 0 : sig.signalTimeMs); v.put("decision", decision); v.put("reason", reason);
         v.put("score", sig == null ? 0 : sig.trendScore); v.put("cost_r", costR); v.put("qty", qty);
         getWritableDatabase().insertWithOnConflict("signals", null, v, SQLiteDatabase.CONFLICT_IGNORE);
+        if ("REJECT".equals(decision)) BotRuntime.recordDecision(symbol, "ENTRY_" + reason);
     }
 
     public synchronized boolean hasEntryForSignal(String symbol, long signalTime) {
@@ -74,6 +76,10 @@ public final class Db extends SQLiteOpenHelper {
     public synchronized void upsertTrade(TradeState t) {
         ContentValues v = tradeValues(t);
         getWritableDatabase().insertWithOnConflict("trades", null, v, SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
+    public synchronized void closeTrade(TradeState t, long closedAt, double gross, double fees, double funding, double net) {
+        closeTrade(t, closedAt, gross, fees, funding, net, 0);
     }
 
     public synchronized void closeTrade(TradeState t, long closedAt, double gross, double fees, double funding, double net, double balanceClose) {
