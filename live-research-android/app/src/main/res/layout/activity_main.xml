@@ -25,7 +25,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="LIVE RESEARCH v0.1.1"
+                    android:text="LIVE RESEARCH v0.1.2"
                     android:textColor="@color/text"
                     android:textSize="24sp"
                     android:textStyle="bold" />
@@ -95,7 +95,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Crypto-only • H1 EMA50/200 + ADX≥22 • M15 pullback + confirmation • −0.35R + слом → −75% • −0.55R → −75% • +1.5R → BE • +2R → trailing 2.2 ATR • TP нет"
+                android:text="Crypto-only • H1 EMA50/200 + ADX≥22 • M15 pullback + confirmation • −0.35R + слом → −75% • −0.55R → −75% • +1.5R → BE • +2R → lock +1R • +2.5R → lock +2R + trailing 1.6 ATR • +3R → lock +2.25R • TP нет"
                 android:textColor="@color/muted"
                 android:textSize="13sp" />
         </LinearLayout>
