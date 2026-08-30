@@ -40,6 +40,7 @@ public class MainActivity extends android.app.Activity {
     private final ExecutorService dashboardWorker = Executors.newSingleThreadExecutor();
     private final AtomicBoolean dashboardBusy = new AtomicBoolean(false);
     private int refreshTick = 0;
+    private volatile boolean hasBybitHistory = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,8 +63,9 @@ public class MainActivity extends android.app.Activity {
         start.setOnClickListener(v -> startBot());
         stop.setOnClickListener(v -> stopBot());
 
+        historyText.setText(stripBalanceLines(dashboardDb.recentClosedTradesText(3)));
         requestNotificationPermission();
-        BotRuntime.log("Live Research v0.1.3.2 готов.");
+        BotRuntime.log("Live Research v0.1.3.3 готов.");
         refreshUiLoop();
     }
 
@@ -130,11 +132,7 @@ public class MainActivity extends android.app.Activity {
                         BotRuntime.scans, BotRuntime.signals,
                         BotRuntime.entries, BotRuntime.reductions));
                 positionsText.setText(BotRuntime.positionsText);
-                if ((refreshTick++ % 3) == 0) {
-                    // SQLite remains a fallback. Bybit is the primary source of truth for the visible last-3 history.
-                    historyText.setText(stripBalanceLines(dashboardDb.recentClosedTradesText(3)));
-                    pollRealDashboard();
-                }
+                if ((refreshTick++ % 3) == 0) pollRealDashboard();
                 ui.postDelayed(this, 1000);
             }
         }, 250);
@@ -156,11 +154,14 @@ public class MainActivity extends android.app.Activity {
                     positions = api.openPositions();
                 }
 
-                List<BybitHistoryClient.ClosedTrade> closed = Collections.emptyList();
+                String historyForUi = null;
                 try (BybitHistoryClient historyApi = new BybitHistoryClient(snap)) {
-                    closed = historyApi.recentClosed(3);
+                    List<BybitHistoryClient.ClosedTrade> raw = historyApi.recentClosed(12);
+                    List<HistoryRow> cycles = collapseHistory(raw, 3);
+                    if (!cycles.isEmpty()) historyForUi = renderBybitHistory(cycles);
                 } catch (Exception historyError) {
                     BotRuntime.log("BYBIT HISTORY: " + historyError);
+                    if (!hasBybitHistory) historyForUi = stripBalanceLines(dashboardDb.recentClosedTradesText(3));
                 }
 
                 Map<String, TradeState> tracked = dashboardDb.openTrades();
@@ -180,12 +181,15 @@ public class MainActivity extends android.app.Activity {
 
                 final double b = balance;
                 final double inc = totalIncome;
-                final String bybitHistory = closed.isEmpty() ? null : renderBybitHistory(closed);
+                final String history = historyForUi;
                 ui.post(() -> {
                     balanceText.setText(String.format(Locale.US, "%.2f", b));
                     incomeText.setText(String.format(Locale.US, "%+.2f", inc));
                     incomeText.setTextColor(getColor(inc >= 0 ? R.color.ok : R.color.danger));
-                    if (bybitHistory != null) historyText.setText(bybitHistory);
+                    if (history != null && !history.trim().isEmpty()) {
+                        historyText.setText(history);
+                        if (!history.startsWith("Закрытых сделок пока нет")) hasBybitHistory = true;
+                    }
                 });
             } catch (Exception e) {
                 BotRuntime.log("DASHBOARD API: " + e);
@@ -232,21 +236,58 @@ public class MainActivity extends android.app.Activity {
         return b.toString();
     }
 
-    private String renderBybitHistory(List<BybitHistoryClient.ClosedTrade> closed) {
+    private List<HistoryRow> collapseHistory(List<BybitHistoryClient.ClosedTrade> source, int limit) {
+        List<HistoryRow> out = new ArrayList<>();
+        if (source == null) return out;
+        final long mergeWindow = 30L * 60_000L;
+        for (BybitHistoryClient.ClosedTrade t : source) {
+            HistoryRow match = null;
+            for (HistoryRow r : out) {
+                double scale = Math.max(1.0, Math.abs(t.avgEntryPrice));
+                boolean sameEntry = Math.abs(r.entry - t.avgEntryPrice) <= scale * 0.000001;
+                boolean closeInTime = Math.abs(r.updatedTime - t.updatedTime) <= mergeWindow;
+                if (r.symbol.equals(t.symbol) && sameEntry && closeInTime) {
+                    match = r;
+                    break;
+                }
+            }
+            if (match == null) {
+                HistoryRow r = new HistoryRow();
+                r.symbol = t.symbol;
+                r.entry = t.avgEntryPrice;
+                r.exitWeighted = t.avgExitPrice * t.closedSize;
+                r.qty = t.closedSize;
+                r.pnl = t.closedPnl;
+                r.updatedTime = t.updatedTime;
+                out.add(r);
+            } else {
+                match.exitWeighted += t.avgExitPrice * t.closedSize;
+                match.qty += t.closedSize;
+                match.pnl += t.closedPnl;
+                match.updatedTime = Math.max(match.updatedTime, t.updatedTime);
+            }
+            if (out.size() >= limit + 4) break;
+        }
+        out.sort((a, b) -> Long.compare(b.updatedTime, a.updatedTime));
+        return out.size() > limit ? new ArrayList<>(out.subList(0, limit)) : out;
+    }
+
+    private String renderBybitHistory(List<HistoryRow> closed) {
         SimpleDateFormat time = new SimpleDateFormat("dd.MM HH:mm", Locale.US);
         StringBuilder b = new StringBuilder();
         int count = Math.min(3, closed.size());
         for (int i = 0; i < count; i++) {
-            BybitHistoryClient.ClosedTrade t = closed.get(i);
+            HistoryRow t = closed.get(i);
             if (b.length() > 0) b.append("\n\n");
+            double exit = t.qty > 0 ? t.exitWeighted / t.qty : 0.0;
             b.append(t.symbol).append("  •  ")
                     .append(t.updatedTime > 0 ? time.format(new Date(t.updatedTime)) : "закрыта");
-            if (t.avgEntryPrice > 0 || t.avgExitPrice > 0) {
+            if (t.entry > 0 || exit > 0) {
                 b.append(String.format(Locale.US,
                         "\nEntry %.8f  →  Exit %.8f  •  Qty %.8f",
-                        t.avgEntryPrice, t.avgExitPrice, t.closedSize));
+                        t.entry, exit, t.qty));
             }
-            b.append(String.format(Locale.US, "\nРезультат: %+.3f USDT", t.closedPnl));
+            b.append(String.format(Locale.US, "\nРезультат: %+.3f USDT", t.pnl));
         }
         return b.length() == 0 ? "Закрытых сделок пока нет." : b.toString();
     }
@@ -254,6 +295,15 @@ public class MainActivity extends android.app.Activity {
     private String stripBalanceLines(String text) {
         if (text == null || text.isEmpty()) return "Закрытых сделок пока нет.";
         return text.replaceAll("(?m)^Баланс:.*(?:\\n|$)", "").trim();
+    }
+
+    private static final class HistoryRow {
+        String symbol;
+        double entry;
+        double exitWeighted;
+        double qty;
+        double pnl;
+        long updatedTime;
     }
 
     @Override protected void onDestroy() {
