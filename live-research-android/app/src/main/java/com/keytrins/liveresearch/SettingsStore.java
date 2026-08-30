@@ -46,9 +46,9 @@ public final class SettingsStore {
         s.atrPeriod = i("atrPeriod", 14);
         s.atrSlMult = d("atrSlMult", 1.2);
         s.swingLookback = i("swingLookback", 5);
-        s.reduceTriggerR = d("reduceTriggerR", -0.35);
-        s.forceReduceR = d("forceReduceR", -0.55);
-        s.reduceFraction = d("reduceFraction", 0.75);
+        s.reduceTriggerR = d("reduceTriggerR", -0.20);
+        s.forceReduceR = d("forceReduceR", -0.35);
+        s.reduceFraction = d("reduceFraction", 0.85);
         s.beTriggerR = d("beTriggerR", 1.5);
         s.trailTriggerR = d("trailTriggerR", 2.0);
         s.trailAtrMult = d("trailAtrMult", 2.2);
