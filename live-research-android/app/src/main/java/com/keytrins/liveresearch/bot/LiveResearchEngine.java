@@ -34,6 +34,8 @@ import java.util.function.Consumer;
 public final class LiveResearchEngine implements AutoCloseable {
     private static final Set<String> STABLE_BASES = new HashSet<>(Arrays.asList(
             "USDT","USDC","USDE","FDUSD","TUSD","DAI","USDD","PYUSD","USD1","USDP"));
+    private static final double DOLLAR_LOCK_STEP_USDT = 0.50;
+    private static final double DOLLAR_LOCK_LAG_USDT = 0.50;
 
     private final SettingsStore.Snapshot s;
     private final BybitClient api;
@@ -271,15 +273,37 @@ public final class LiveResearchEngine implements AutoCloseable {
     }
 
     private void maybeBeTrail(TradeState tr,Instrument inst,double r,double mark)throws Exception{
-        if(inst==null)return;
-        if(!tr.beArmed&&r>=s.beTriggerR){
-            double offset=tr.entryPrice*(2*tr.takerFee)+tr.spreadAtEntry+2*inst.tickSize.doubleValue();
-            double candidate="Buy".equals(tr.side)?tr.entryPrice+offset:tr.entryPrice-offset;
-            if(stopImproves(tr,inst,candidate,mark)){
-                BigDecimal q=stopPrice(inst,tr.side,candidate);api.setStop(tr.symbol,Decimals.fmt(q));tr.currentStop=q.doubleValue();tr.beArmed=true;tr.state="BE";log("BE "+tr.symbol+" stop="+q);
+        if(inst==null||tr.currentQty<=0)return;
+
+        // Primary profit protection is now dollar-based: every +$0.50 of peak open PnL
+        // advances the protected result by another $0.50, with a constant $0.50 lag.
+        // At +$0.50 peak this becomes BE+costs; +$1.00 protects about +$0.50;
+        // +$1.50 protects about +$1.00; etc. Stop is exchange-side and never loosens.
+        double qty=tr.currentQty;
+        double peakGrossUsd="Buy".equals(tr.side)
+                ? Math.max(0.0,tr.highWater-tr.entryPrice)*qty
+                : Math.max(0.0,tr.entryPrice-tr.lowWater)*qty;
+        double steps=Math.floor((peakGrossUsd+1e-9)/DOLLAR_LOCK_STEP_USDT);
+        if(steps>=1.0){
+            double protectedUsd=Math.max(0.0,steps*DOLLAR_LOCK_STEP_USDT-DOLLAR_LOCK_LAG_USDT);
+            double costPerUnit=tr.entryPrice*(2*tr.takerFee)+tr.spreadAtEntry+2*inst.tickSize.doubleValue();
+            double movePerUnit=protectedUsd/qty+costPerUnit;
+            double dollarCandidate="Buy".equals(tr.side)?tr.entryPrice+movePerUnit:tr.entryPrice-movePerUnit;
+            if(stopImproves(tr,inst,dollarCandidate,mark)){
+                BigDecimal q=stopPrice(inst,tr.side,dollarCandidate);
+                api.setStop(tr.symbol,Decimals.fmt(q));
+                tr.currentStop=q.doubleValue();
+                tr.beArmed=true;
+                tr.state=protectedUsd>0?"DOLLAR_LOCK":"BE";
+                log(String.format(Locale.US,
+                        "DOLLAR LOCK %s peak=$%.3f protect=$%.2f stop=%s",
+                        tr.symbol,peakGrossUsd,protectedUsd,Decimals.fmt(q)));
             }
         }
 
+        // Keep the existing high-R ATR/R-floor logic only as an additional protection layer.
+        // Whichever rule produces the more protective valid stop wins because stopImproves()
+        // never allows the exchange stop to move backward.
         if(r>=s.trailTriggerR){tr.trailing=true;tr.state="TRAILING";}
         if(!tr.trailing)return;
 
