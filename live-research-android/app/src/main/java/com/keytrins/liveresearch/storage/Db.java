@@ -74,12 +74,13 @@ public final class Db extends SQLiteOpenHelper {
     }
 
     public synchronized void upsertTrade(TradeState t) {
+        if (t.balanceAtOpen <= 0 && BotRuntime.balance > 0) t.balanceAtOpen = BotRuntime.balance;
         ContentValues v = tradeValues(t);
         getWritableDatabase().insertWithOnConflict("trades", null, v, SQLiteDatabase.CONFLICT_REPLACE);
     }
 
     public synchronized void closeTrade(TradeState t, long closedAt, double gross, double fees, double funding, double net) {
-        closeTrade(t, closedAt, gross, fees, funding, net, 0);
+        closeTrade(t, closedAt, gross, fees, funding, net, BotRuntime.balance);
     }
 
     public synchronized void closeTrade(TradeState t, long closedAt, double gross, double fees, double funding, double net, double balanceClose) {
