@@ -12,7 +12,7 @@ This is the behavioral contract for server-v1.
 - refresh about hourly.
 
 ## Decision timing
-- position management about every 5 sec;
+- Android v0.1.3.5 position management targets about every **1 sec** and is interleaved through a long M15 universe scan so the scan does not intentionally pause protection for the full scan duration;
 - one scan after each closed M15, roughly 8 sec after close;
 - only fully closed H1/M15 candles may be used for signals.
 
@@ -80,27 +80,35 @@ Fresh window about 20 minutes.
 - initial exchange stop remains emergency protection.
 
 ## Primary positive-side control: $0.50 step lock
-Android v0.1.3.4 changes the primary profit protection from a late R-only BE to a dollar-step lock based on the maximum favorable mark reached while the remaining position is open.
+Android v0.1.3.5 uses a dollar-step lock based on a separately persisted maximum observed open-position PnL.
 
 Definitions:
-- `peakGrossUsd = max favorable price move from entry * current remaining quantity`;
+- `peakProfitUsdt` is monotonic: it may only increase and is persisted with the trade state so restart must not forget a previously reached higher profit;
+- Android updates it from observed Bybit unrealized PnL / mark-derived gross PnL during position management;
+- for an upgraded position that was already open before v0.1.3.5, persisted favorable high/low-water is used as a migration lower bound for the peak;
 - `step = 0.50 USDT`;
 - `lag = 0.50 USDT`;
-- `protectedUsd = max(0, floor(peakGrossUsd / 0.50) * 0.50 - 0.50)`.
+- `targetProtectedUsd = max(0, floor(peakProfitUsdt / 0.50) * 0.50 - 0.50)`.
 
 Behavior:
 - peak reaches about `+0.50 USDT` => exchange stop moves to BE plus estimated round-trip fee/spread/tick costs;
-- peak reaches `+1.00 USDT` => protect about `+0.50 USDT` plus costs;
-- peak reaches `+1.50 USDT` => protect about `+1.00 USDT` plus costs;
-- peak reaches `+2.00 USDT` => protect about `+1.50 USDT` plus costs;
+- peak reaches `+1.00 USDT` => target protection about `+0.50 USDT`;
+- peak reaches `+1.50 USDT` => target protection about `+1.00 USDT`;
+- peak reaches `+2.00 USDT` => target protection about `+1.50 USDT`;
 - continue indefinitely in `0.50 USDT` steps with constant `0.50 USDT` lag;
 - stop is quantized to exchange tick size;
 - stop may never move backward;
-- if a desired stop would already be beyond the current mark, do not place an invalid stop.
+- if a desired stop would already be beyond the current mark, do not place an invalid stop;
+- Android also persists an estimated `protectedProfitUsdt` derived from the actually accepted exchange stop, and exposes `Peak / Protected` in the dashboard.
 
 The current Android implementation estimates per-unit costs as:
 `entryPrice * (2 * takerFee) + spreadAtEntry + 2*tickSize`
 and adds that cost allowance to the protected dollar floor when converting protected USDT to stop price.
+
+Important execution limitation of the Android runtime:
+- it is still REST polling, not a tick-by-tick stream;
+- a very fast favorable spike and retrace between observations can still be missed;
+- server runtime should eventually use a more continuous market-data/execution stream, while preserving the same economic dollar-lock rule.
 
 ## Additional high-R protection
 The previous high-R ATR/R-floor layer remains as an additional protection layer only. Whichever rule yields the more protective valid stop wins because the stop never loosens.
