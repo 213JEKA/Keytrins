@@ -22,28 +22,146 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:orientation="vertical">
+
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="LIVE RESEARCH v0.1.2"
+                    android:text="LIVE RESEARCH"
                     android:textColor="@color/text"
-                    android:textSize="24sp"
+                    android:textSize="25sp"
                     android:textStyle="bold" />
+
                 <TextView
                     android:id="@+id/statusText"
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
+                    android:layout_marginTop="3dp"
                     android:text="Остановлен"
                     android:textColor="@color/muted"
-                    android:textSize="15sp" />
+                    android:textSize="14sp" />
             </LinearLayout>
 
             <Button
                 android:id="@+id/settingsButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="API ⚙" />
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:backgroundTint="@color/panel2"
+                android:minWidth="0dp"
+                android:padding="0dp"
+                android:text="⚙"
+                android:textColor="@color/text"
+                android:textSize="20sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="118dp"
+                android:layout_marginRight="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/card_balance_bg"
+                android:gravity="center_vertical"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="БАЛАНС"
+                    android:textColor="@color/card_label"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/balanceText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="7dp"
+                    android:text="—"
+                    android:textColor="@color/text"
+                    android:textSize="28sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="USDT"
+                    android:textColor="@color/muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="118dp"
+                android:layout_marginLeft="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/card_income_bg"
+                android:gravity="center_vertical"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ДОХОД ОБЩИЙ"
+                    android:textColor="@color/card_label"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/incomeText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="7dp"
+                    android:text="—"
+                    android:textColor="@color/ok"
+                    android:textSize="28sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="USDT"
+                    android:textColor="@color/muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/startButton"
+                android:layout_width="142dp"
+                android:layout_height="50dp"
+                android:backgroundTint="@color/ok"
+                android:text="СТАРТ"
+                android:textColor="#07110B"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <Space
+                android:layout_width="14dp"
+                android:layout_height="1dp" />
+
+            <Button
+                android:id="@+id/stopButton"
+                android:layout_width="142dp"
+                android:layout_height="50dp"
+                android:backgroundTint="@color/danger"
+                android:text="СТОП"
+                android:textColor="#170606"
+                android:textSize="15sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
         <LinearLayout
@@ -56,73 +174,20 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Управление"
+                android:text="Состояние"
                 android:textColor="@color/text"
-                android:textSize="18sp"
+                android:textSize="19sp"
                 android:textStyle="bold" />
 
-            <Switch
-                android:id="@+id/liveSwitch"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="РЕАЛЬНАЯ ТОРГОВЛЯ"
-                android:textColor="@color/text" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-                <EditText
-                    android:id="@+id/riskInput"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:hint="Риск USDT"
-                    android:inputType="numberDecimal"
-                    android:textColor="@color/text"
-                    android:textColorHint="@color/muted" />
-                <EditText
-                    android:id="@+id/universeInput"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:hint="Активов"
-                    android:inputType="number"
-                    android:textColor="@color/text"
-                    android:textColorHint="@color/muted" />
-            </LinearLayout>
-
             <TextView
+                android:id="@+id/metricsText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Crypto-only • H1 EMA50/200 + ADX≥22 • M15 pullback + confirmation • −0.35R + слом → −75% • −0.55R → −75% • +1.5R → BE • +2R → lock +1R • +2.5R → lock +2R + trailing 1.6 ATR • +3R → lock +2.25R • TP нет"
-                android:textColor="@color/muted"
-                android:textSize="13sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:orientation="horizontal">
-            <Button
-                android:id="@+id/saveButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="СОХРАНИТЬ" />
-            <Button
-                android:id="@+id/startButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="СТАРТ" />
-            <Button
-                android:id="@+id/stopButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="СТОП" />
+                android:layout_marginTop="10dp"
+                android:lineSpacingExtra="3dp"
+                android:text="—"
+                android:textColor="@color/text"
+                android:textSize="15sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -131,19 +196,22 @@
             android:layout_marginTop="12dp"
             android:background="@drawable/panel_bg"
             android:orientation="vertical">
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Состояние"
+                android:text="Открытые сделки"
                 android:textColor="@color/text"
-                android:textSize="18sp"
+                android:textSize="19sp"
                 android:textStyle="bold" />
+
             <TextView
-                android:id="@+id/metricsText"
+                android:id="@+id/positionsText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="—"
+                android:layout_marginTop="10dp"
+                android:lineSpacingExtra="2dp"
+                android:text="Открытых сделок нет."
                 android:textColor="@color/text"
                 android:textSize="14sp" />
         </LinearLayout>
@@ -152,95 +220,27 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
+            android:layout_marginBottom="12dp"
             android:background="@drawable/panel_bg"
             android:orientation="vertical">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Открытые сделки"
-                android:textColor="@color/text"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-            <TextView
-                android:id="@+id/positionsText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:fontFamily="monospace"
-                android:text="Открытых сделок нет."
-                android:textColor="@color/text"
-                android:textSize="12sp" />
-        </LinearLayout>
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/panel_bg"
-            android:orientation="vertical">
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Последние закрытые сделки"
                 android:textColor="@color/text"
-                android:textSize="18sp"
+                android:textSize="19sp"
                 android:textStyle="bold" />
+
             <TextView
                 android:id="@+id/historyText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:fontFamily="monospace"
+                android:layout_marginTop="10dp"
+                android:lineSpacingExtra="2dp"
                 android:text="Закрытых сделок пока нет."
                 android:textColor="@color/text"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/panel_bg"
-            android:orientation="vertical">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Последний скан"
-                android:textColor="@color/text"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-            <TextView
-                android:id="@+id/scanText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="Скан ещё не выполнялся."
-                android:textColor="@color/muted"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/panel_bg"
-            android:orientation="vertical">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Журнал"
-                android:textColor="@color/text"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-            <TextView
-                android:id="@+id/logText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:fontFamily="monospace"
-                android:text="Готов."
-                android:textColor="@color/muted"
-                android:textSize="11sp" />
+                android:textSize="14sp" />
         </LinearLayout>
 
     </LinearLayout>
