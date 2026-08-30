@@ -225,20 +225,49 @@ public final class LiveResearchEngine implements AutoCloseable {
                 if(p.positionIdx!=0){log("WARNING "+symbol+": Hedge mode, управление остановлено");continue;}
                 tr.currentQty=p.size; Ticker tk=tickers.get(symbol); double mark=tk==null?p.markPrice:positive(tk.mark,tk.last,p.markPrice); if(mark<=0)continue;
                 tr.highWater=Math.max(tr.highWater,mark); tr.lowWater=Math.min(tr.lowWater,mark);
-                double r=priceR(tr,mark); maybeReduce(tr,inst,r); maybeBeTrail(tr,inst,r,mark); db.upsertTrade(tr);
+                double r=priceR(tr,mark);
+                boolean riskExit=maybeReduce(tr,inst,r);
+                if(!riskExit)maybeBeTrail(tr,inst,r,mark);
+                db.upsertTrade(tr);
             }
         } catch(Exception e){log("MANAGE ERROR: "+err(e));}
     }
 
-    private void maybeReduce(TradeState tr,Instrument inst,double r)throws Exception{
-        if(tr.reduced||inst==null)return;
-        boolean fresh=tr.structureBreak&&(System.currentTimeMillis()-tr.structureBreakTimeMs)<=20*60_000L;
-        String reason=null; if(r<=s.forceReduceR)reason="FORCE";else if(r<=s.reduceTriggerR&&fresh)reason="STRUCTURE"; if(reason==null)return;
-        BigDecimal close=reduceQty(inst,tr.currentQty);if(close==null){log("REDUCE invalid qty "+tr.symbol);return;}
+    private boolean maybeReduce(TradeState tr,Instrument inst,double r)throws Exception{
+        if(inst==null||tr.currentQty<=0)return false;
         String opposite="Buy".equals(tr.side)?"Sell":"Buy";
-        api.reducePosition(tr.tradeId,tr.symbol,opposite,Decimals.fmt(close));
-        Position p=api.waitReduced(tr.symbol,tr.currentQty,8_000L); tr.currentQty=p==null?0:p.size; tr.reduced=true; tr.state="REDUCED";
-        BotRuntime.reductions++; db.event("INFO","REDUCE_75",reason+" r="+r+" close="+close,tr.symbol,tr.tradeId); log(String.format(Locale.US,"REDUCE %s %.3fR close=%s remain=%.8f",tr.symbol,r,Decimals.fmt(close),tr.currentQty));
+
+        if(r<=s.forceReduceR){
+            BigDecimal close=fullCloseQty(inst,tr.currentQty);
+            if(close==null){log("FORCE EXIT invalid qty "+tr.symbol);return true;}
+            double before=tr.currentQty;
+            api.reducePosition("FX"+System.currentTimeMillis(),tr.symbol,opposite,Decimals.fmt(close));
+            Position p=api.waitReduced(tr.symbol,before,8_000L);
+            tr.currentQty=p==null?0:p.size;
+            tr.reduced=true;
+            tr.state=p==null?"EXITING":"FORCE_EXIT";
+            BotRuntime.reductions++;
+            db.event("INFO","FORCE_EXIT_100","r="+r+" close="+close,tr.symbol,tr.tradeId);
+            log(String.format(Locale.US,"FORCE EXIT %s %.3fR close=%s remain=%.8f",tr.symbol,r,Decimals.fmt(close),tr.currentQty));
+            return true;
+        }
+
+        if(tr.reduced)return false;
+        boolean fresh=tr.structureBreak&&(System.currentTimeMillis()-tr.structureBreakTimeMs)<=20*60_000L;
+        if(r>s.reduceTriggerR||!fresh)return false;
+
+        BigDecimal close=reduceQty(inst,tr.currentQty);
+        if(close==null){log("REDUCE invalid qty "+tr.symbol);return false;}
+        double before=tr.currentQty;
+        api.reducePosition("R85"+System.currentTimeMillis(),tr.symbol,opposite,Decimals.fmt(close));
+        Position p=api.waitReduced(tr.symbol,before,8_000L);
+        tr.currentQty=p==null?0:p.size;
+        tr.reduced=true;
+        tr.state=p==null?"EXITING":"REDUCED_85";
+        BotRuntime.reductions++;
+        db.event("INFO","REDUCE_85","STRUCTURE r="+r+" close="+close,tr.symbol,tr.tradeId);
+        log(String.format(Locale.US,"REDUCE85 %s %.3fR close=%s remain=%.8f",tr.symbol,r,Decimals.fmt(close),tr.currentQty));
+        return p==null;
     }
 
     private void maybeBeTrail(TradeState tr,Instrument inst,double r,double mark)throws Exception{
@@ -287,13 +316,22 @@ public final class LiveResearchEngine implements AutoCloseable {
         BigDecimal q=Decimals.floorStep(Decimals.bd(desired),inst.qtyStep);if(q.compareTo(inst.minQty)<0)return null;
         if(q.compareTo(inst.maxMarketQty)>0)q=Decimals.floorStep(inst.maxMarketQty,inst.qtyStep);
         if(q.multiply(Decimals.bd(price)).compareTo(inst.minNotional)<0)return null;
-        BigDecimal remain=Decimals.ceilStep(q.multiply(Decimals.bd(1.0-s.reduceFraction)),inst.qtyStep);if(remain.compareTo(inst.minQty)<0)return null;return q;
+        return q;
     }
 
     private BigDecimal reduceQty(Instrument inst,double current){
-        BigDecimal cur=Decimals.bd(current); BigDecimal remain=Decimals.ceilStep(cur.multiply(Decimals.bd(1.0-s.reduceFraction)),inst.qtyStep);
-        if(remain.compareTo(inst.minQty)<0)remain=inst.minQty; BigDecimal close=Decimals.floorStep(cur.subtract(remain),inst.qtyStep);
-        if(close.signum()<=0||close.compareTo(cur)>=0)return null;return close;
+        BigDecimal cur=Decimals.floorStep(Decimals.bd(current),inst.qtyStep);
+        if(cur.signum()<=0)return null;
+        BigDecimal remain=Decimals.ceilStep(cur.multiply(Decimals.bd(1.0-s.reduceFraction)),inst.qtyStep);
+        if(remain.compareTo(inst.minQty)<0)return cur;
+        BigDecimal close=Decimals.floorStep(cur.subtract(remain),inst.qtyStep);
+        if(close.signum()<=0)return null;
+        return close.compareTo(cur)>0?cur:close;
+    }
+
+    private BigDecimal fullCloseQty(Instrument inst,double current){
+        BigDecimal cur=Decimals.floorStep(Decimals.bd(current),inst.qtyStep);
+        return cur.signum()>0?cur:null;
     }
 
     private BigDecimal stopPrice(Instrument inst,String side,double raw){return "Buy".equals(side)?Decimals.floorTick(raw,inst.tickSize):Decimals.ceilTick(raw,inst.tickSize);}
