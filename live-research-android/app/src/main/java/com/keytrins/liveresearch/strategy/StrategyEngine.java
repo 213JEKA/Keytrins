@@ -1,5 +1,6 @@
 package com.keytrins.liveresearch.strategy;
 
+import com.keytrins.liveresearch.BotRuntime;
 import com.keytrins.liveresearch.SettingsStore;
 import com.keytrins.liveresearch.model.Candle;
 import com.keytrins.liveresearch.model.Signal;
@@ -12,10 +13,15 @@ public final class StrategyEngine {
 
     public StrategyEngine(SettingsStore.Snapshot s) { this.s = s; }
 
+    private SignalResult reject(String symbol, String reason) {
+        BotRuntime.recordDecision(symbol, reason);
+        return new SignalResult(null, reason);
+    }
+
     public SignalResult buildSignal(String symbol, List<Candle> h1, List<Candle> m15) {
         int needH1 = Math.max(s.h1EmaSlow + 10, 220);
         int needM15 = Math.max(s.m15EmaSlow + 15, 80);
-        if (h1.size() < needH1 || m15.size() < needM15) return new SignalResult(null, "NOT_ENOUGH_BARS");
+        if (h1.size() < needH1 || m15.size() < needM15) return reject(symbol, "NOT_ENOUGH_BARS");
 
         double[] hFast = Indicators.ema(h1, s.h1EmaFast);
         double[] hSlow = Indicators.ema(h1, s.h1EmaSlow);
@@ -27,12 +33,12 @@ public final class StrategyEngine {
         int hi = h1.size() - 1, mi = m15.size() - 1, pi = mi - 1;
         double adx = hAdx[hi], fastNow = hFast[hi], slow = hSlow[hi], hClose = h1.get(hi).close;
         int slopeIdx = hi - s.h1SlopeBars;
-        if (slopeIdx < 0 || Double.isNaN(adx) || Double.isNaN(mAtr[mi])) return new SignalResult(null, "INDICATOR_NAN");
+        if (slopeIdx < 0 || Double.isNaN(adx) || Double.isNaN(mAtr[mi])) return reject(symbol, "INDICATOR_NAN");
         double fastThen = hFast[slopeIdx];
 
         boolean longTrend = fastNow > slow && fastNow > fastThen && adx >= s.adxMin && hClose > fastNow;
         boolean shortTrend = fastNow < slow && fastNow < fastThen && adx >= s.adxMin && hClose < fastNow;
-        if (!longTrend && !shortTrend) return new SignalResult(null, "NO_H1_TREND");
+        if (!longTrend && !shortTrend) return reject(symbol, "NO_H1_TREND");
         String dir = longTrend ? "LONG" : "SHORT";
 
         boolean touched = false;
@@ -42,13 +48,13 @@ public final class StrategyEngine {
             double lo = Math.min(mFast[i], mSlow[i]), hiZone = Math.max(mFast[i], mSlow[i]);
             if (r.low <= hiZone && r.high >= lo) { touched = true; break; }
         }
-        if (!touched) return new SignalResult(null, "NO_M15_PULLBACK");
+        if (!touched) return reject(symbol, "NO_M15_PULLBACK");
 
         Candle M = m15.get(mi), prev = m15.get(pi);
         boolean confirmed = longTrend
                 ? M.close > M.open && M.close > prev.high && M.close > mFast[mi]
                 : M.close < M.open && M.close < prev.low && M.close < mFast[mi];
-        if (!confirmed) return new SignalResult(null, "NO_M15_CONFIRMATION");
+        if (!confirmed) return reject(symbol, "NO_M15_CONFIRMATION");
 
         double entry = M.close, atr = mAtr[mi], stop;
         int swingFrom = Math.max(0, m15.size() - s.swingLookback);
@@ -64,7 +70,7 @@ public final class StrategyEngine {
             stop = Math.max(atrStop, swing);
         }
         double risk = Math.abs(entry - stop);
-        if (!(risk > 0) || !(atr > 0)) return new SignalResult(null, "INVALID_STOP");
+        if (!(risk > 0) || !(atr > 0)) return reject(symbol, "INVALID_STOP");
 
         double emaSepPct = Math.abs(fastNow - slow) / hClose * 100.0;
         double slopePct = Math.abs(fastNow - fastThen) / hClose * 100.0;
@@ -72,6 +78,7 @@ public final class StrategyEngine {
         long signalTime = M.startMs + 15 * 60_000L;
         Signal sig = new Signal(symbol, dir, signalTime, score, adx, fastNow, slow, atr,
                 entry, stop, risk, "H1_TREND_M15_PULLBACK_CONFIRM");
+        BotRuntime.recordDecision(symbol, "SIGNAL_" + dir);
         return new SignalResult(sig, "SIGNAL");
     }
 
