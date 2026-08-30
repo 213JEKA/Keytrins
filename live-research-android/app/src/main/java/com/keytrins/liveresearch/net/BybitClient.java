@@ -76,7 +76,10 @@ public final class BybitClient implements AutoCloseable {
                 String maxMarket = lf.optString("maxMktOrderQty", lf.optString("maxMarketOrderQty", "999999999"));
                 BigDecimal maxQty = bd(maxMarket.isEmpty() ? "999999999" : maxMarket);
                 BigDecimal minNotional = bd(lf.optString("minNotionalValue", "0"));
-                out.put(symbol, new Instrument(symbol, x.optString("baseCoin"), tick, step, minQty, maxQty, minNotional));
+                String contractType = x.optString("contractType", "");
+                long launchTime = x.optLong("launchTime", 0L);
+                out.put(symbol, new Instrument(symbol, x.optString("baseCoin"), contractType, launchTime,
+                        tick, step, minQty, maxQty, minNotional));
             }
             cursor = result.optString("nextPageCursor", "");
         } while (!cursor.isEmpty());
@@ -156,7 +159,8 @@ public final class BybitClient implements AutoCloseable {
             JSONObject x = list.getJSONObject(i);
             double size = d(x,"size"); if (size <= 0) continue;
             Position p = new Position(x.optString("symbol"), x.optString("side"), size,
-                    d(x,"avgPrice"), d(x,"markPrice"), d(x,"stopLoss"), x.optInt("positionIdx",0));
+                    d(x,"avgPrice"), d(x,"markPrice"), d(x,"stopLoss"), d(x,"unrealisedPnl"),
+                    x.optInt("positionIdx",0));
             out.put(p.symbol,p);
         }
         return out;
@@ -168,7 +172,8 @@ public final class BybitClient implements AutoCloseable {
         JSONArray list = result(r).getJSONArray("list");
         for (int i=0;i<list.length();i++) {
             JSONObject x = list.getJSONObject(i); double size=d(x,"size"); if(size<=0) continue;
-            return new Position(symbol,x.optString("side"),size,d(x,"avgPrice"),d(x,"markPrice"),d(x,"stopLoss"),x.optInt("positionIdx",0));
+            return new Position(symbol,x.optString("side"),size,d(x,"avgPrice"),d(x,"markPrice"),
+                    d(x,"stopLoss"),d(x,"unrealisedPnl"),x.optInt("positionIdx",0));
         }
         return null;
     }
@@ -280,7 +285,7 @@ public final class BybitClient implements AutoCloseable {
     private JSONObject request(String method,String path,String body,Map<String,String> headers) throws Exception {
         HttpURLConnection c=(HttpURLConnection)new URL(base+path).openConnection();
         c.setRequestMethod(method); c.setConnectTimeout(10_000); c.setReadTimeout(15_000); c.setUseCaches(false);
-        c.setRequestProperty("User-Agent","LiveResearchAndroid/0.1");
+        c.setRequestProperty("User-Agent","LiveResearchAndroid/0.1.1");
         if(headers!=null) for(Map.Entry<String,String> e:headers.entrySet()) c.setRequestProperty(e.getKey(),e.getValue());
         if(body!=null){ c.setDoOutput(true); try(OutputStream o=c.getOutputStream()){o.write(body.getBytes(StandardCharsets.UTF_8));}}
         int code=c.getResponseCode(); InputStream in=code>=200&&code<300?c.getInputStream():c.getErrorStream();
@@ -292,19 +297,18 @@ public final class BybitClient implements AutoCloseable {
     }
 
     private static JSONObject result(JSONObject r) throws Exception { return r.getJSONObject("result"); }
-    private static String read(InputStream in)throws Exception{ if(in==null)return""; StringBuilder b=new StringBuilder(); try(BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){String line;while((line=r.readLine())!=null)b.append(line);}return b.toString();}
-    private static String query(LinkedHashMap<String,String> q)throws Exception{StringBuilder b=new StringBuilder();for(Map.Entry<String,String>e:q.entrySet()){if(b.length()>0)b.append('&');b.append(enc(e.getKey())).append('=').append(enc(e.getValue()));}return b.toString();}
-    private static String enc(String x)throws Exception{return URLEncoder.encode(x,StandardCharsets.UTF_8.name()).replace("+","%20");}
-    private static String hmac(String text,String secret)throws Exception{Mac m=Mac.getInstance("HmacSHA256");m.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8),"HmacSHA256"));byte[]a=m.doFinal(text.getBytes(StandardCharsets.UTF_8));StringBuilder b=new StringBuilder();for(byte x:a)b.append(String.format(Locale.US,"%02x",x));return b.toString();}
-    private static String json(LinkedHashMap<String,Object> m){StringBuilder b=new StringBuilder("{");boolean first=true;for(Map.Entry<String,Object>e:m.entrySet()){if(!first)b.append(',');first=false;b.append(JSONObject.quote(e.getKey())).append(':');Object v=e.getValue();if(v==null)b.append("null");else if(v instanceof Number||v instanceof Boolean)b.append(v.toString());else b.append(JSONObject.quote(v.toString()));}return b.append('}').toString();}
+    private void requireKey(){if(s.apiKey==null||s.apiKey.isEmpty()||s.apiSecret==null||s.apiSecret.isEmpty())throw new IllegalStateException("API key/secret не заданы");}
+    private static String read(InputStream in)throws Exception{if(in==null)return"";try(BufferedReader b=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){StringBuilder s=new StringBuilder();String x;while((x=b.readLine())!=null)s.append(x);return s.toString();}}
+    private static String query(LinkedHashMap<String,String> p)throws Exception{StringBuilder b=new StringBuilder();for(Map.Entry<String,String>e:p.entrySet()){if(b.length()>0)b.append('&');b.append(URLEncoder.encode(e.getKey(),"UTF-8")).append('=').append(URLEncoder.encode(e.getValue(),"UTF-8"));}return b.toString();}
+    private static String json(LinkedHashMap<String,Object>b){JSONObject o=new JSONObject();for(Map.Entry<String,Object>e:b.entrySet())o.put(e.getKey(),e.getValue());return o.toString();}
+    private static String hmac(String value,String secret)throws Exception{Mac m=Mac.getInstance("HmacSHA256");m.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8),"HmacSHA256"));byte[]x=m.doFinal(value.getBytes(StandardCharsets.UTF_8));StringBuilder b=new StringBuilder();for(byte z:x)b.append(String.format(Locale.US,"%02x",z&255));return b.toString();}
+    private static double d(JSONObject x,String k){String v=x.optString(k,"");if(v==null||v.isEmpty())return 0;try{return Double.parseDouble(v);}catch(Exception e){return x.optDouble(k,0);}}
     private static BigDecimal bd(String x){try{return new BigDecimal(x);}catch(Exception e){return BigDecimal.ZERO;}}
-    private static double d(JSONObject x,String k){try{String v=x.optString(k,"");return v.isEmpty()?0:Double.parseDouble(v);}catch(Exception e){return 0;}}
-    private static String shortId(String s){return s.length()<=36?s:s.substring(0,36);}
-    private void requireKey(){if(s.apiKey.isEmpty()||s.apiSecret.isEmpty())throw new IllegalStateException("API key/secret не заданы");}
-    @Override public void close() {}
+    private static String shortId(String x){return x.length()<=36?x:x.substring(0,36);}
+    @Override public void close(){}
 
     public static final class ApiException extends Exception {
         public final int code; public final String raw;
-        public ApiException(int code,String msg,String raw){super("Bybit "+code+": "+msg);this.code=code;this.raw=raw;}
+        ApiException(int code,String msg,String raw){super("Bybit "+code+": "+msg);this.code=code;this.raw=raw;}
     }
 }
