@@ -47,7 +47,8 @@ public class SettingsActivity extends android.app.Activity {
                 .setTitle("Сбросить отсчёт дохода?")
                 .setMessage("Текущий баланс станет новой точкой отсчёта общего дохода.")
                 .setPositiveButton("Сбросить", (d, w) -> {
-                    store.clearBaseline();
+                    if (BotRuntime.balance > 0) store.setBaselineBalance(BotRuntime.balance);
+                    else store.clearBaseline();
                     Toast.makeText(this, "Отсчёт дохода сброшен", Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton("Отмена", null)
