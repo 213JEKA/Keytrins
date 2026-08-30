@@ -19,18 +19,28 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 public final class BybitClient implements AutoCloseable {
+    private static final Set<String> CRYPTO_BASES = new HashSet<>(Arrays.asList(
+            "BTC","ETH","SOL","XRP","BNB","DOGE","ADA","TRX","LINK","AVAX","SUI","LTC","BCH","DOT",
+            "AAVE","UNI","NEAR","ETC","FIL","ATOM","TON","ARB","OP","INJ","RENDER","ICP","XLM","HBAR",
+            "ALGO","SEI","TIA","WLD","PEPE","SHIB","BONK","TAO","JUP","ENA","ONDO","PENDLE","CRV","LDO",
+            "FET","KAS","PYTH","RUNE","POL","MATIC","APT","GALA","SAND","MANA","IMX","MKR","COMP","SNX",
+            "DYDX","AR","STX","EGLD","FLOW","XTZ","THETA","QNT","ZEC","DASH","IOTA","KAVA","CAKE","GMX"));
+
     private final SettingsStore.Snapshot s;
     private final String base;
     private static final long RECV_WINDOW = 5000L;
@@ -67,7 +77,14 @@ public final class BybitClient implements AutoCloseable {
                 String symbol = x.optString("symbol");
                 String settle = x.optString("settleCoin");
                 String status = x.optString("status");
+                String baseCoin = x.optString("baseCoin");
+                String contractType = x.optString("contractType", "");
+                long launchTime = x.optLong("launchTime", 0L);
+                long minLaunch = System.currentTimeMillis() - Math.max(0, s.minAgeDays) * 24L * 60L * 60_000L;
                 if (!"USDT".equals(settle) || !"Trading".equals(status) || !symbol.endsWith("USDT")) continue;
+                if (!CRYPTO_BASES.contains(baseCoin)) continue;
+                if (!contractType.isEmpty() && !"LinearPerpetual".equals(contractType)) continue;
+                if (launchTime > 0 && launchTime > minLaunch) continue;
                 JSONObject pf = x.getJSONObject("priceFilter");
                 JSONObject lf = x.getJSONObject("lotSizeFilter");
                 BigDecimal tick = bd(pf.optString("tickSize", "0.00000001"));
@@ -76,9 +93,7 @@ public final class BybitClient implements AutoCloseable {
                 String maxMarket = lf.optString("maxMktOrderQty", lf.optString("maxMarketOrderQty", "999999999"));
                 BigDecimal maxQty = bd(maxMarket.isEmpty() ? "999999999" : maxMarket);
                 BigDecimal minNotional = bd(lf.optString("minNotionalValue", "0"));
-                String contractType = x.optString("contractType", "");
-                long launchTime = x.optLong("launchTime", 0L);
-                out.put(symbol, new Instrument(symbol, x.optString("baseCoin"), contractType, launchTime,
+                out.put(symbol, new Instrument(symbol, baseCoin, contractType, launchTime,
                         tick, step, minQty, maxQty, minNotional));
             }
             cursor = result.optString("nextPageCursor", "");
