@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -11,7 +12,6 @@ import android.os.Looper;
 import android.text.InputType;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -30,9 +30,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MainActivity extends android.app.Activity {
-    private EditText riskInput, universeInput;
-    private Switch liveSwitch;
-    private TextView statusText, metricsText, positionsText, historyText, scanText, logText;
+    private TextView statusText, balanceText, incomeText, metricsText, positionsText, historyText;
     private SettingsStore store;
     private Db dashboardDb;
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -47,39 +45,23 @@ public class MainActivity extends android.app.Activity {
         store = new SettingsStore(this);
         dashboardDb = new Db(this);
 
-        riskInput = findViewById(R.id.riskInput);
-        universeInput = findViewById(R.id.universeInput);
-        liveSwitch = findViewById(R.id.liveSwitch);
         statusText = findViewById(R.id.statusText);
+        balanceText = findViewById(R.id.balanceText);
+        incomeText = findViewById(R.id.incomeText);
         metricsText = findViewById(R.id.metricsText);
         positionsText = findViewById(R.id.positionsText);
         historyText = findViewById(R.id.historyText);
-        scanText = findViewById(R.id.scanText);
-        logText = findViewById(R.id.logText);
         Button settings = findViewById(R.id.settingsButton);
-        Button save = findViewById(R.id.saveButton);
         Button start = findViewById(R.id.startButton);
         Button stop = findViewById(R.id.stopButton);
 
-        loadForm();
-        liveSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            if (!isChecked) BotRuntime.liveArmed = false;
-            if (isChecked && buttonView.isPressed()) confirmLive();
-        });
-
         settings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
-        save.setOnClickListener(v -> saveForm(true));
         start.setOnClickListener(v -> startBot());
         stop.setOnClickListener(v -> stopBot());
 
         requestNotificationPermission();
-        BotRuntime.log("Live Research v0.1.1 готов. Настройки и журнал сохраняются между обновлениями.");
+        BotRuntime.log("Live Research v0.1.3 готов.");
         refreshUiLoop();
-    }
-
-    @Override protected void onResume() {
-        super.onResume();
-        loadForm();
     }
 
     private void requestNotificationPermission() {
@@ -88,63 +70,41 @@ public class MainActivity extends android.app.Activity {
         }
     }
 
-    private void loadForm() {
+    private void startBot() {
         SettingsStore.Snapshot s = store.load();
-        liveSwitch.setChecked(s.live);
-        riskInput.setText(String.format(Locale.US, "%.2f", s.riskUsdt));
-        universeInput.setText(Integer.toString(s.universeSize));
-    }
-
-    private boolean saveForm(boolean toast) {
-        try {
-            double risk = Double.parseDouble(riskInput.getText().toString().trim().replace(',', '.'));
-            int universe = Integer.parseInt(universeInput.getText().toString().trim());
-            if (risk <= 0 || risk > 100) throw new IllegalArgumentException("Риск должен быть 0–100 USDT");
-            if (universe < 1 || universe > 100) throw new IllegalArgumentException("Активов должно быть 1–100");
-            store.saveLive(liveSwitch.isChecked());
-            store.saveStrategy(risk, universe);
-            if (toast) Toast.makeText(this, "Стратегия сохранена", Toast.LENGTH_SHORT).show();
-            return true;
-        } catch (Exception e) {
-            Toast.makeText(this, "Ошибка: " + e.getMessage(), Toast.LENGTH_LONG).show();
-            return false;
+        if (s.live && (s.apiKey.isEmpty() || s.apiSecret.isEmpty())) {
+            Toast.makeText(this, "Добавьте API key + secret в Настройках", Toast.LENGTH_LONG).show();
+            return;
         }
+        if (s.live && !BotRuntime.liveArmed) {
+            confirmLiveAndStart();
+            return;
+        }
+        startBotInternal(s);
     }
 
-    private void confirmLive() {
+    private void confirmLiveAndStart() {
         final EditText input = new EditText(this);
         input.setHint("Введите LIVE");
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
         new AlertDialog.Builder(this)
-                .setTitle("Включить реальные ордера?")
-                .setMessage("Робот сможет отправлять реальные ордера Bybit. API-ключ не должен иметь право вывода средств.\n\nЧтобы включить, введите LIVE.")
+                .setTitle("Запустить реальную торговлю?")
+                .setMessage("Для текущего запуска подтвердите LIVE.")
                 .setView(input)
-                .setPositiveButton("Включить", (d, w) -> {
+                .setPositiveButton("Запустить", (d, w) -> {
                     if (!"LIVE".equals(input.getText().toString().trim())) {
                         BotRuntime.liveArmed = false;
-                        liveSwitch.setChecked(false);
-                        Toast.makeText(this, "Не включено", Toast.LENGTH_SHORT).show();
-                    } else {
-                        BotRuntime.liveArmed = true;
-                        Toast.makeText(this, "LIVE разрешён для текущего запуска приложения", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, "LIVE не подтверждён", Toast.LENGTH_SHORT).show();
+                        return;
                     }
+                    BotRuntime.liveArmed = true;
+                    startBotInternal(store.load());
                 })
-                .setNegativeButton("Отмена", (d, w) -> liveSwitch.setChecked(false))
-                .setOnCancelListener(d -> liveSwitch.setChecked(false))
+                .setNegativeButton("Отмена", null)
                 .show();
     }
 
-    private void startBot() {
-        if (!saveForm(false)) return;
-        SettingsStore.Snapshot s = store.load();
-        if (s.live && !BotRuntime.liveArmed) {
-            Toast.makeText(this, "LIVE не подтверждён. Выключите и снова включите LIVE, затем введите LIVE.", Toast.LENGTH_LONG).show();
-            return;
-        }
-        if (s.live && (s.apiKey.isEmpty() || s.apiSecret.isEmpty())) {
-            Toast.makeText(this, "Откройте Настройки API и добавьте key + secret", Toast.LENGTH_LONG).show();
-            return;
-        }
+    private void startBotInternal(SettingsStore.Snapshot s) {
         Intent i = new Intent(this, BotService.class);
         if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
         Toast.makeText(this, s.live ? "LIVE запущен" : "Наблюдение запущено", Toast.LENGTH_SHORT).show();
@@ -162,16 +122,15 @@ public class MainActivity extends android.app.Activity {
             @Override public void run() {
                 statusText.setText(BotRuntime.status);
                 metricsText.setText(String.format(Locale.US,
-                        "Реальный баланс Bybit: %.2f USDT\nUniverse: %d\nОткрыто позиций: %d\nСканов: %d\nСигналов: %d\nВходов: %d\nСокращений: %d",
-                        BotRuntime.balance, BotRuntime.universe, BotRuntime.openPositions,
-                        BotRuntime.scans, BotRuntime.signals, BotRuntime.entries, BotRuntime.reductions));
+                        "Universe  %d     •     Открыто  %d\nСканов  %d     •     Сигналов  %d\nВходов  %d     •     Сокращений  %d",
+                        BotRuntime.universe, BotRuntime.openPositions,
+                        BotRuntime.scans, BotRuntime.signals,
+                        BotRuntime.entries, BotRuntime.reductions));
                 positionsText.setText(BotRuntime.positionsText);
-                scanText.setText(BotRuntime.lastScanText);
                 if ((refreshTick++ % 3) == 0) {
-                    historyText.setText(dashboardDb.recentClosedTradesText(12));
+                    historyText.setText(stripBalanceLines(dashboardDb.recentClosedTradesText(3)));
                     pollRealDashboard();
                 }
-                logText.setText(BotRuntime.logText());
                 ui.postDelayed(this, 1000);
             }
         }, 250);
@@ -191,16 +150,42 @@ public class MainActivity extends android.app.Activity {
                 Map<String, TradeState> tracked = dashboardDb.openTrades();
                 BotRuntime.balance = balance;
                 BotRuntime.openPositions = positions.size();
-                BotRuntime.positionsText = renderPositions(positions, tracked, balance);
+                BotRuntime.positionsText = renderPositions(positions, tracked);
+
+                double baseline = store.baselineBalance();
+                if (Double.isNaN(baseline)) {
+                    double dbBaseline = firstKnownBalance();
+                    store.seedBaselineIfAbsent(dbBaseline > 0 ? dbBaseline : balance);
+                    baseline = store.baselineBalance();
+                }
+                double unrealized = 0.0;
+                for (Position p : positions.values()) unrealized += p.unrealisedPnl;
+                double totalIncome = balance - baseline + unrealized;
+
+                final double b = balance;
+                final double inc = totalIncome;
+                ui.post(() -> {
+                    balanceText.setText(String.format(Locale.US, "%.2f", b));
+                    incomeText.setText(String.format(Locale.US, "%+.2f", inc));
+                    incomeText.setTextColor(getColor(inc >= 0 ? R.color.ok : R.color.danger));
+                });
             } catch (Exception e) {
-                BotRuntime.log("DASHBOARD API: " + e.getMessage());
+                BotRuntime.log("DASHBOARD API: " + e);
             } finally {
                 dashboardBusy.set(false);
             }
         });
     }
 
-    private String renderPositions(Map<String, Position> positions, Map<String, TradeState> tracked, double balance) {
+    private double firstKnownBalance() {
+        String sql = "SELECT balance_open FROM closed_trades WHERE balance_open > 0 ORDER BY opened_at ASC LIMIT 1";
+        try (Cursor c = dashboardDb.getReadableDatabase().rawQuery(sql, null)) {
+            if (c.moveToFirst()) return c.getDouble(0);
+        } catch (Exception ignored) { }
+        return 0.0;
+    }
+
+    private String renderPositions(Map<String, Position> positions, Map<String, TradeState> tracked) {
         if (positions == null || positions.isEmpty()) return "Открытых сделок нет.";
         List<String> symbols = new ArrayList<>(positions.keySet());
         Collections.sort(symbols);
@@ -214,19 +199,24 @@ public class MainActivity extends android.app.Activity {
             if (t != null && t.riskDistance > 0) {
                 r = "Buy".equals(t.side) ? (p.markPrice - t.entryPrice) / t.riskDistance : (t.entryPrice - p.markPrice) / t.riskDistance;
             }
-            b.append(symbol).append(' ').append(p.side).append(" • ").append(state);
-            b.append(String.format(Locale.US, "\nEntry %.8f • Mark %.8f • Qty %.8f", p.avgPrice, p.markPrice, p.size));
-            b.append(String.format(Locale.US, "\nРеальный PnL Bybit: %+.3f USDT", p.unrealisedPnl));
+            String direction = "Buy".equals(p.side) ? "LONG" : "SHORT";
+            b.append(symbol).append("  ").append(direction).append("  •  ").append(state);
+            b.append(String.format(Locale.US, "\nEntry %.8f   •   Mark %.8f   •   Qty %.8f", p.avgPrice, p.markPrice, p.size));
+            b.append(String.format(Locale.US, "\nPnL %+.3f USDT", p.unrealisedPnl));
             if (t != null) {
-                b.append(String.format(Locale.US, " • %+.2fR", r));
+                b.append(String.format(Locale.US, "   •   %+.2fR", r));
                 double sl = p.stopLoss > 0 ? p.stopLoss : t.currentStop;
-                b.append(String.format(Locale.US, " • SL %.8f", sl));
+                b.append(String.format(Locale.US, "   •   SL %.8f", sl));
             } else if (p.stopLoss > 0) {
-                b.append(String.format(Locale.US, " • SL %.8f", p.stopLoss));
+                b.append(String.format(Locale.US, "   •   SL %.8f", p.stopLoss));
             }
-            b.append(String.format(Locale.US, "\nРеальный баланс счёта: %.2f USDT", balance));
         }
         return b.toString();
+    }
+
+    private String stripBalanceLines(String text) {
+        if (text == null || text.isEmpty()) return "Закрытых сделок пока нет.";
+        return text.replaceAll("(?m)^Баланс:.*(?:\\n|$)", "").trim();
     }
 
     @Override protected void onDestroy() {
