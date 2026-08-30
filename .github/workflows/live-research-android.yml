@@ -12,6 +12,9 @@ on:
 permissions:
   contents: read
 
+env:
+  HAS_SIGNING_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -42,9 +45,32 @@ jobs:
 
       - name: Align unsigned release APK
         run: |
-          zipalign -f -p 4 \
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 \
             live-research-android/app/build/outputs/apk/release/app-release-unsigned.apk \
             live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.1-aligned-unsigned.apk
+
+      - name: Restore private signing key
+        if: env.HAS_SIGNING_KEY == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/live-research-signing.jks"
+
+      - name: Sign release APK
+        if: env.HAS_SIGNING_KEY == 'true'
+        env:
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks "$RUNNER_TEMP/live-research-signing.jks" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:KS_PASS \
+            --key-pass env:KEY_PASS \
+            --out live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.1-signed.apk \
+            live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.1-aligned-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs \
+            live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.1-signed.apk
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -58,4 +84,12 @@ jobs:
         with:
           name: LiveResearchAndroid-v0.1.1-aligned-unsigned
           path: live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.1-aligned-unsigned.apk
+          if-no-files-found: error
+
+      - name: Upload stable signed release APK
+        if: env.HAS_SIGNING_KEY == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveResearchAndroid-v0.1.1-signed
+          path: live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.1-signed.apk
           if-no-files-found: error
