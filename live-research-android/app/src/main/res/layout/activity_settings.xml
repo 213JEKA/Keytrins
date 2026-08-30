@@ -96,7 +96,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Crypto-only • H1 EMA50/200 + ADX≥22 • M15 pullback + confirmation\n-0.20R + слом → закрыть 85% • -0.35R → закрыть весь остаток\n+1.5R → BE • +2R → lock +1R\n+2.5R → lock +2R + trailing 1.6 ATR\n+3R → lock +2.25R • TP нет"
+                android:text="Crypto-only • H1 EMA50/200 + ADX≥22 • M15 pullback + confirmation\n-0.20R + слом → закрыть 85% • -0.35R → закрыть весь остаток\nDollar lock: каждые +0.50 USDT по максимуму → защита +0.50 USDT с отставанием 0.50\n+0.50 → BE+расходы • +1.00 → lock ~+0.50 • +1.50 → ~+1.00\nВысокий R: ATR/R-floor остаётся дополнительной защитой • TP нет"
                 android:textColor="@color/muted"
                 android:textSize="13sp" />
         </LinearLayout>
