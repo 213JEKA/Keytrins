@@ -14,16 +14,16 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Настройки API"
+            android:text="Настройки"
             android:textColor="@color/text"
-            android:textSize="24sp"
+            android:textSize="25sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="Bybit V5 • ключи хранятся только на устройстве"
+            android:layout_marginTop="4dp"
+            android:text="Торговля, стратегия, API и диагностика"
             android:textColor="@color/muted"
             android:textSize="14sp" />
 
@@ -34,10 +34,93 @@
             android:background="@drawable/panel_bg"
             android:orientation="vertical">
 
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Торговля"
+                android:textColor="@color/text"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <Switch
+                android:id="@+id/liveSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Реальная торговля"
+                android:textColor="@color/text" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/riskInput"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Риск USDT"
+                    android:inputType="numberDecimal"
+                    android:textColor="@color/text"
+                    android:textColorHint="@color/muted" />
+
+                <EditText
+                    android:id="@+id/universeInput"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Universe"
+                    android:inputType="number"
+                    android:textColor="@color/text"
+                    android:textColorHint="@color/muted" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/panel_bg"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Стратегия"
+                android:textColor="@color/text"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Crypto-only • H1 EMA50/200 + ADX≥22 • M15 pullback + confirmation\n-0.35R + слом → -75% • -0.55R → -75%\n+1.5R → BE • +2R → lock +1R\n+2.5R → lock +2R + trailing 1.6 ATR\n+3R → lock +2.25R • TP нет"
+                android:textColor="@color/muted"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/panel_bg"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Bybit API"
+                android:textColor="@color/text"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
             <EditText
                 android:id="@+id/apiKey"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
                 android:hint="API key"
                 android:singleLine="true"
                 android:textColor="@color/text"
@@ -47,20 +130,12 @@
                 android:id="@+id/apiSecret"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="6dp"
                 android:hint="API secret"
                 android:inputType="textPassword"
                 android:singleLine="true"
                 android:textColor="@color/text"
                 android:textColorHint="@color/muted" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Разрешения: Read + Derivatives Trade. Withdraw НЕ давать. Secret шифруется через Android Keystore."
-                android:textColor="@color/muted"
-                android:textSize="12sp" />
 
             <Switch
                 android:id="@+id/testnetSwitch"
@@ -69,25 +144,60 @@
                 android:layout_marginTop="6dp"
                 android:text="Testnet"
                 android:textColor="@color/text" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Read + Derivatives Trade. Withdraw не включать. Secret хранится локально."
+                android:textColor="@color/muted"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <Button
-            android:id="@+id/saveApiButton"
+            android:id="@+id/saveSettingsButton"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_marginTop="14dp"
+            android:backgroundTint="@color/accent"
+            android:text="СОХРАНИТЬ НАСТРОЙКИ"
+            android:textColor="#151008"
+            android:textStyle="bold" />
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:text="СОХРАНИТЬ API" />
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/doctorApiButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="ПРОВЕРКА API" />
+
+            <Space android:layout_width="8dp" android:layout_height="1dp" />
+
+            <Button
+                android:id="@+id/logButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="ЖУРНАЛ" />
+        </LinearLayout>
 
         <Button
-            android:id="@+id/doctorApiButton"
+            android:id="@+id/resetIncomeButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="ПРОВЕРИТЬ ПОДКЛЮЧЕНИЕ" />
+            android:text="СБРОСИТЬ ОТСЧЁТ ДОХОДА" />
 
         <Button
             android:id="@+id/backButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
             android:text="НАЗАД" />
 
     </LinearLayout>
