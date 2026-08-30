@@ -75,7 +75,7 @@ public final class LiveResearchEngine implements AutoCloseable {
     public void run(BooleanSupplier keepRunning, Consumer<String> notify) throws Exception {
         refreshUniverse(true);
         if (!s.apiKey.isEmpty() && !s.apiSecret.isEmpty()) {
-            try { BotRuntime.balance = api.walletBalanceUsdt(); } catch (Exception e) { log("Баланс недоступен: "+e.getMessage()); }
+            try { BotRuntime.balance = api.walletBalanceUsdt(); } catch (Exception e) { log("Баланс недоступен: "+err(e)); }
         }
         BotRuntime.status = s.live ? "LIVE • работает" : "OBSERVE • работает";
         notify.accept(BotRuntime.status);
@@ -97,7 +97,7 @@ public final class LiveResearchEngine implements AutoCloseable {
                 BotRuntime.openPositions = trades.size();
                 notify.accept(BotRuntime.status + " • pos " + trades.size() + " • uni " + universe.size());
             } catch (Exception e) {
-                log("LOOP ERROR: "+e.getMessage());
+                log("LOOP ERROR: "+err(e));
             }
             Thread.sleep(1000L);
         }
@@ -125,7 +125,7 @@ public final class LiveResearchEngine implements AutoCloseable {
     private void scanOnce() {
         BotRuntime.scans++;
         try { tickers = api.getAllTickers(); }
-        catch (Exception e) { log("Ticker scan fail: "+e.getMessage()); return; }
+        catch (Exception e) { log("Ticker scan fail: "+err(e)); return; }
 
         Map<String,Position> exchangePositions = new HashMap<>();
         if (!s.apiKey.isEmpty() && !s.apiSecret.isEmpty()) {
@@ -138,7 +138,7 @@ public final class LiveResearchEngine implements AutoCloseable {
                     }
                 }
             } catch (Exception e) {
-                log("Positions read fail: "+e.getMessage());
+                log("Positions read fail: "+err(e));
                 if (s.live) return;
             }
         }
@@ -227,7 +227,7 @@ public final class LiveResearchEngine implements AutoCloseable {
                 tr.highWater=Math.max(tr.highWater,mark); tr.lowWater=Math.min(tr.lowWater,mark);
                 double r=priceR(tr,mark); maybeReduce(tr,inst,r); maybeBeTrail(tr,inst,r,mark); db.upsertTrade(tr);
             }
-        } catch(Exception e){log("MANAGE ERROR: "+e.getMessage());}
+        } catch(Exception e){log("MANAGE ERROR: "+err(e));}
     }
 
     private void maybeReduce(TradeState tr,Instrument inst,double r)throws Exception{
@@ -250,11 +250,28 @@ public final class LiveResearchEngine implements AutoCloseable {
                 BigDecimal q=stopPrice(inst,tr.side,candidate);api.setStop(tr.symbol,Decimals.fmt(q));tr.currentStop=q.doubleValue();tr.beArmed=true;tr.state="BE";log("BE "+tr.symbol+" stop="+q);
             }
         }
+
         if(r>=s.trailTriggerR){tr.trailing=true;tr.state="TRAILING";}
-        if(!tr.trailing||tr.atr<=0)return;
-        double candidate="Buy".equals(tr.side)?tr.highWater-s.trailAtrMult*tr.atr:tr.lowWater+s.trailAtrMult*tr.atr;
+        if(!tr.trailing)return;
+
+        double floorR=0.0;
+        if(r>=3.0)floorR=2.25;
+        else if(r>=2.5)floorR=2.0;
+        else if(r>=2.0)floorR=1.0;
+
+        double trailMult=r>=2.5?1.6:s.trailAtrMult;
+        double candidate=tr.currentStop;
+        if(tr.atr>0){
+            candidate="Buy".equals(tr.side)?tr.highWater-trailMult*tr.atr:tr.lowWater+trailMult*tr.atr;
+        }
+        if(floorR>0&&tr.riskDistance>0){
+            double floor="Buy".equals(tr.side)?tr.entryPrice+floorR*tr.riskDistance:tr.entryPrice-floorR*tr.riskDistance;
+            candidate="Buy".equals(tr.side)?Math.max(candidate,floor):Math.min(candidate,floor);
+        }
+
         if(stopImproves(tr,inst,candidate,mark)){
-            BigDecimal q=stopPrice(inst,tr.side,candidate);api.setStop(tr.symbol,Decimals.fmt(q));tr.currentStop=q.doubleValue();log(String.format(Locale.US,"TRAIL %s %.3fR stop=%s",tr.symbol,r,Decimals.fmt(q)));
+            BigDecimal q=stopPrice(inst,tr.side,candidate);api.setStop(tr.symbol,Decimals.fmt(q));tr.currentStop=q.doubleValue();
+            log(String.format(Locale.US,"PROFIT LOCK %s %.3fR floor=%.2fR trail=%.1fATR stop=%s",tr.symbol,r,floorR,trailMult,Decimals.fmt(q)));
         }
     }
 
@@ -281,6 +298,7 @@ public final class LiveResearchEngine implements AutoCloseable {
 
     private BigDecimal stopPrice(Instrument inst,String side,double raw){return "Buy".equals(side)?Decimals.floorTick(raw,inst.tickSize):Decimals.ceilTick(raw,inst.tickSize);}
     private static double positive(double...x){for(double v:x)if(v>0)return v;return 0;}
+    private static String err(Throwable e){String m=e==null?null:e.getMessage();return m==null||m.trim().isEmpty()?String.valueOf(e):e.getClass().getSimpleName()+": "+m;}
     private void log(String x){BotRuntime.log(x);db.event("INFO","LOG",x,null,null);}
     @Override public void close(){try{db.close();}catch(Exception ignored){}try{api.close();}catch(Exception ignored){}}
 }
