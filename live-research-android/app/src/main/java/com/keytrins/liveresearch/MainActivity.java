@@ -239,6 +239,7 @@ public class MainActivity extends android.app.Activity {
                         Math.max(0.0, t.peakProfitUsdt), Math.max(0.0, t.protectedProfitUsdt)));
                 double ha=t.entryAtr>0?t.entryAtr:t.atr;
                 if(ha>0){ double ht="Buy".equals(t.side)?t.entryPrice-0.15*ha:t.entryPrice+0.15*ha; b.append(String.format(Locale.US,"\nHedge trigger %.8f • idx %d",ht,p.positionIdx)); }
+                if(h!=null && t.tradeId!=null && t.tradeId.equals(h.primaryTradeId)) b.append(" • hedgeState ").append(h.state);
             } else if (p.stopLoss > 0) {
                 b.append(String.format(Locale.US, "   •   SL %.8f", p.stopLoss));
             }

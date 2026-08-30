@@ -257,6 +257,14 @@ public final class BybitClient implements AutoCloseable {
         return result(r).optString("orderId", "");
     }
 
+    public String placeHedgeEntry(String tradeId, String symbol, String side, String qty, int positionIdx) throws Exception {
+        LinkedHashMap<String,Object> b = new LinkedHashMap<>();
+        b.put("category","linear"); b.put("symbol",symbol); b.put("side",side); b.put("orderType","Market");
+        b.put("qty",qty); b.put("positionIdx",positionIdx); b.put("reduceOnly",false); b.put("orderLinkId",shortId(tradeId));
+        JSONObject r = privatePost("/v5/order/create", b);
+        return result(r).optString("orderId", "");
+    }
+
     public String reducePosition(String tradeId, String symbol, String side, String qty) throws Exception {
         return reducePosition(tradeId,symbol,side,qty,0);
     }

@@ -41,7 +41,7 @@ public final class LiveResearchEngine implements AutoCloseable {
     private static final double HEDGE_TRIGGER_R_BACKSTOP = -0.15;
     private static final double HEDGE_EMERGENCY_STOP_ATR = 0.20;
     private static final long HEDGE_UNKNOWN_WAIT_MS = 60_000L;
-    private static final long HEDGE_RETRY_MS = 5_000L;
+    private static final long HEDGE_RETRY_MS = 750L;
     private static final long HEDGE_OPEN_GRACE_MS = 8_000L;
     private static final long MANAGE_INTERVAL_MS = 1_000L;
     private static final long BALANCE_REFRESH_MS = 5_000L;
@@ -271,12 +271,32 @@ public final class LiveResearchEngine implements AutoCloseable {
                     } else if(hedgeAttemptAllowed(tr,hedge)){
                         maybeOpenHedge(tr,inst,primary,tk,mark);
                         hedge=hedges.get(symbol);
+                        try { exchangeHedge=api.position(symbol,expectedHedgeIdx); } catch(Exception ignored){}
+                    }
+
+                    // A definite exchange REJECT is safe to retry once immediately with the simplified hedge order.
+                    // OPEN_UNKNOWN is intentionally excluded: unknown outcomes are reconciled, never blindly duplicated.
+                    if(exchangeHedge==null && hedge!=null && "REJECTED".equals(hedge.state)){
+                        double triggerAtr=tr.entryAtr>0?tr.entryAtr:tr.atr;
+                        double adverse="Buy".equals(tr.side)?tr.entryPrice-mark:mark-tr.entryPrice;
+                        boolean required=(triggerAtr>0 && adverse+1e-12>=HEDGE_TRIGGER_ATR*triggerAtr) || priceR(tr,mark)<=HEDGE_TRIGGER_R_BACKSTOP;
+                        if(required){
+                            hedge.lastAttemptMs=0;
+                            maybeOpenHedge(tr,inst,primary,tk,mark);
+                            hedge=hedges.get(symbol);
+                            try { exchangeHedge=api.position(symbol,expectedHedgeIdx); } catch(Exception ignored){}
+                        }
                     }
                     if(exchangeHedge!=null && hedge!=null && primaryEstimatedNet(tr,inst,mark)>0){
                         maybeCloseHedgeOnPrimaryRecovery(tr,hedge,inst,exchangeHedge);
                     }
 
                     double r=priceR(tr,mark);
+                    if(r<=s.forceReduceR && exchangeHedge==null){
+                        String hs=hedge==null?"NONE":hedge.state;
+                        db.event("ERROR","HEDGE_FAIL_FALLBACK_EXIT","r="+r+" hedgeState="+hs,symbol,tr.tradeId);
+                        log("HEDGE FAIL -> PRIMARY SAFETY EXIT "+symbol+" r="+String.format(Locale.US,"%.3f",r)+" hedge="+hs);
+                    }
                     boolean riskExit=maybeReduce(tr,inst,r,primary.positionIdx);
                     if(!riskExit)maybeBeTrail(tr,inst,r,mark,primary.positionIdx);
                 } else {
@@ -340,24 +360,41 @@ public final class LiveResearchEngine implements AutoCloseable {
 
         String hedgeId=("HDG_"+tr.symbol+"_"+(h.openedAtMs/1000L)); if(hedgeId.length()>36)hedgeId=hedgeId.substring(0,36);
         try {
-            api.placeEntry(hedgeId,tr.symbol,hedgeSide,Decimals.fmt(qty),Decimals.fmt(stopQ),hedgeIdx);
+            // Reliability rule: create the protective hedge as the smallest possible market request.
+            // Do not re-run leverage mutation and do not attach TP/SL to the create-order payload.
+            api.placeHedgeEntry(hedgeId,tr.symbol,hedgeSide,Decimals.fmt(qty),hedgeIdx);
             Position hp=api.waitPosition(tr.symbol,hedgeIdx,12_000L);
             h.entryPrice=hp.avgPrice>0?hp.avgPrice:entryRef; h.initialQty=hp.size; h.currentQty=hp.size;
-            h.currentStop=hp.stopLoss>0?hp.stopLoss:stopQ.doubleValue(); h.initialStop=h.currentStop;
-            h.highWater=h.entryPrice; h.lowWater=h.entryPrice; h.state="OPEN";
+            h.highWater=h.entryPrice; h.lowWater=h.entryPrice; h.state="OPEN_UNPROTECTED";
+            h.currentStop=hp.stopLoss; h.initialStop=hp.stopLoss;
+            db.upsertHedge(h);
+
+            // Emergency stop is a second operation based on the ACTUAL hedge fill price.
+            // If this call fails, keep the hedge alive; manageHedge() will keep retrying protection.
+            double actualRawStop="Buy".equals(hedgeSide)?h.entryPrice-HEDGE_EMERGENCY_STOP_ATR*triggerAtr:h.entryPrice+HEDGE_EMERGENCY_STOP_ATR*triggerAtr;
+            BigDecimal actualStopQ=stopPrice(inst,hedgeSide,actualRawStop);
+            try {
+                api.setStop(h.symbol,Decimals.fmt(actualStopQ),h.positionIdx);
+                h.currentStop=actualStopQ.doubleValue(); h.initialStop=h.currentStop; h.state="OPEN";
+            } catch(Exception stopError) {
+                db.event("WARN","HEDGE_STOP_PENDING",err(stopError),tr.symbol,tr.tradeId);
+                log("HEDGE OPEN but emergency SL pending "+tr.symbol+": "+err(stopError));
+            }
             db.upsertHedge(h);
             db.event("INFO","HEDGE_OPEN","trigger=-0.15ATR qty="+Decimals.fmt(qty)+" idx="+hedgeIdx,tr.symbol,tr.tradeId);
             log(String.format(Locale.US,"HEDGE OPEN %s %s idx=%d qty=%s @ %.8f emergencySL=%.8f trigger=%.3fATR",
-                    tr.symbol,hedgeSide,hedgeIdx,Decimals.fmt(qty),h.entryPrice,h.currentStop,adverse/tr.atr));
+                    tr.symbol,hedgeSide,hedgeIdx,Decimals.fmt(qty),h.entryPrice,h.currentStop,triggerAtr>0?adverse/triggerAtr:0));
         } catch(BybitClient.ApiException e){
-            h.state="REJECTED"; db.upsertHedge(h);
+            h.state="REJECTED"; h.lastAttemptMs=System.currentTimeMillis(); db.upsertHedge(h);
+            db.event("ERROR","HEDGE_REJECTED",err(e),tr.symbol,tr.tradeId);
             log("HEDGE REJECTED "+tr.symbol+": "+err(e));
         } catch(Exception e){
-            h.state="OPEN_UNKNOWN"; db.upsertHedge(h);
+            h.state="OPEN_UNKNOWN"; h.lastAttemptMs=System.currentTimeMillis(); db.upsertHedge(h);
             try {
                 Position hp=api.position(tr.symbol,hedgeIdx);
-                if(hp!=null){ h.entryPrice=hp.avgPrice; h.initialQty=hp.size; h.currentQty=hp.size; h.currentStop=hp.stopLoss; h.state="OPEN"; db.upsertHedge(h); }
+                if(hp!=null){ h.entryPrice=hp.avgPrice; h.initialQty=hp.size; h.currentQty=hp.size; h.currentStop=hp.stopLoss; h.initialStop=hp.stopLoss; h.state="OPEN_RECOVERED"; db.upsertHedge(h); }
             } catch(Exception ignored){}
+            db.event("WARN","HEDGE_OPEN_UNKNOWN",err(e),tr.symbol,tr.tradeId);
             log("HEDGE OPEN UNKNOWN "+tr.symbol+": "+err(e)+"; blind retry disabled");
         }
     }
@@ -399,6 +436,21 @@ public final class LiveResearchEngine implements AutoCloseable {
         if(h.entryPrice<=0)h.entryPrice=hp.avgPrice; if(h.initialQty<=0)h.initialQty=hp.size;
         double mark=tk==null?hp.markPrice:positive(tk.mark,tk.last,hp.markPrice); if(mark<=0)return;
         h.highWater=Math.max(h.highWater>0?h.highWater:h.entryPrice,mark); h.lowWater=h.lowWater>0?Math.min(h.lowWater,mark):mark;
+        if(h.currentStop<=0 && h.atr>0){
+            double emergencyRaw="Buy".equals(h.side)?h.entryPrice-HEDGE_EMERGENCY_STOP_ATR*h.atr:h.entryPrice+HEDGE_EMERGENCY_STOP_ATR*h.atr;
+            BigDecimal emergencyQ=stopPrice(inst,h.side,emergencyRaw);
+            boolean valid="Buy".equals(h.side)?emergencyQ.doubleValue()<mark:emergencyQ.doubleValue()>mark;
+            if(valid){
+                try {
+                    api.setStop(h.symbol,Decimals.fmt(emergencyQ),h.positionIdx);
+                    h.currentStop=emergencyQ.doubleValue(); if(h.initialStop<=0)h.initialStop=h.currentStop; h.state="OPEN";
+                    db.event("INFO","HEDGE_STOP_ARMED","stop="+Decimals.fmt(emergencyQ),h.symbol,tr.tradeId);
+                } catch(Exception e){
+                    h.state="OPEN_UNPROTECTED";
+                    db.event("WARN","HEDGE_STOP_RETRY",err(e),h.symbol,tr.tradeId);
+                }
+            }
+        }
         double markGross="Buy".equals(h.side)?(mark-h.entryPrice)*h.currentQty:(h.entryPrice-mark)*h.currentQty;
         double observed=hp.unrealisedPnl;
         if(Double.isNaN(observed)||Double.isInfinite(observed))observed=markGross;
