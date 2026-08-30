@@ -18,7 +18,7 @@ import java.util.Locale;
 import java.util.Map;
 
 public final class Db extends SQLiteOpenHelper {
-    private static final int VERSION = 4;
+    private static final int VERSION = 5;
 
     public Db(Context c) { super(c, "live_research_android.db", null, VERSION); }
 
@@ -26,7 +26,7 @@ public final class Db extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE events(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, level TEXT, kind TEXT, symbol TEXT, trade_id TEXT, message TEXT)");
         db.execSQL("CREATE TABLE signals(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, symbol TEXT NOT NULL, signal_time INTEGER, decision TEXT, reason TEXT, score REAL, cost_r REAL, qty REAL, UNIQUE(symbol, signal_time, decision) ON CONFLICT IGNORE)");
         db.execSQL("CREATE TABLE scan_decisions(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, scan_time INTEGER, symbol TEXT NOT NULL, decision TEXT, reason TEXT)");
-        db.execSQL("CREATE TABLE trades(trade_id TEXT PRIMARY KEY, symbol TEXT UNIQUE NOT NULL, side TEXT, opened_at INTEGER, entry REAL, initial_qty REAL, current_qty REAL, initial_stop REAL, current_stop REAL, risk_distance REAL, target_risk REAL, atr REAL, taker_fee REAL, spread REAL, cost_r REAL, state TEXT, high_water REAL, low_water REAL, peak_profit REAL DEFAULT 0, protected_profit REAL DEFAULT 0, reduced INTEGER, be_armed INTEGER, trailing INTEGER, structure_break INTEGER, structure_break_time INTEGER, balance_open REAL DEFAULT 0)");
+        db.execSQL("CREATE TABLE trades(trade_id TEXT PRIMARY KEY, symbol TEXT UNIQUE NOT NULL, side TEXT, opened_at INTEGER, entry REAL, initial_qty REAL, current_qty REAL, initial_stop REAL, current_stop REAL, risk_distance REAL, target_risk REAL, atr REAL, entry_atr REAL DEFAULT 0, taker_fee REAL, spread REAL, cost_r REAL, state TEXT, high_water REAL, low_water REAL, peak_profit REAL DEFAULT 0, protected_profit REAL DEFAULT 0, reduced INTEGER, be_armed INTEGER, trailing INTEGER, structure_break INTEGER, structure_break_time INTEGER, balance_open REAL DEFAULT 0)");
         db.execSQL("CREATE TABLE hedges(primary_trade_id TEXT PRIMARY KEY, symbol TEXT UNIQUE NOT NULL, side TEXT, position_idx INTEGER, state TEXT, opened_at INTEGER, last_attempt INTEGER, entry REAL, initial_qty REAL, current_qty REAL, initial_stop REAL, current_stop REAL, atr REAL, taker_fee REAL, spread REAL, high_water REAL, low_water REAL, peak_profit REAL DEFAULT 0, protected_profit REAL DEFAULT 0)");
         db.execSQL("CREATE TABLE closed_trades(id INTEGER PRIMARY KEY AUTOINCREMENT, trade_id TEXT, symbol TEXT, side TEXT, opened_at INTEGER, closed_at INTEGER, entry REAL, initial_qty REAL, target_risk REAL, gross REAL, fees REAL, funding REAL, net REAL, net_r REAL, peak_profit REAL DEFAULT 0, protected_profit REAL DEFAULT 0, reduced INTEGER, be_armed INTEGER, trailing INTEGER, balance_open REAL DEFAULT 0, balance_close REAL DEFAULT 0)");
         db.execSQL("CREATE INDEX idx_scan_time ON scan_decisions(scan_time)");
@@ -50,6 +50,9 @@ public final class Db extends SQLiteOpenHelper {
         }
         if (oldVersion < 4) {
             db.execSQL("CREATE TABLE IF NOT EXISTS hedges(primary_trade_id TEXT PRIMARY KEY, symbol TEXT UNIQUE NOT NULL, side TEXT, position_idx INTEGER, state TEXT, opened_at INTEGER, last_attempt INTEGER, entry REAL, initial_qty REAL, current_qty REAL, initial_stop REAL, current_stop REAL, atr REAL, taker_fee REAL, spread REAL, high_water REAL, low_water REAL, peak_profit REAL DEFAULT 0, protected_profit REAL DEFAULT 0)");
+        }
+        if (oldVersion < 5) {
+            try { db.execSQL("ALTER TABLE trades ADD COLUMN entry_atr REAL DEFAULT 0"); } catch (Exception ignored) {}
         }
     }
 
@@ -118,6 +121,8 @@ public final class Db extends SQLiteOpenHelper {
                 t.openedAtMs = l(c, "opened_at"); t.entryPrice = d(c, "entry"); t.initialQty = d(c, "initial_qty");
                 t.currentQty = d(c, "current_qty"); t.initialStop = d(c, "initial_stop"); t.currentStop = d(c, "current_stop");
                 t.riskDistance = d(c, "risk_distance"); t.targetRiskUsdt = d(c, "target_risk"); t.atr = d(c, "atr");
+                int entryAtrIdx = c.getColumnIndex("entry_atr"); t.entryAtr = entryAtrIdx >= 0 ? c.getDouble(entryAtrIdx) : t.atr;
+                if (!(t.entryAtr > 0)) t.entryAtr = t.atr;
                 t.takerFee = d(c, "taker_fee"); t.spreadAtEntry = d(c, "spread"); t.costREst = d(c, "cost_r");
                 t.highWater = d(c, "high_water"); t.lowWater = d(c, "low_water");
                 int peakIdx = c.getColumnIndex("peak_profit"); t.peakProfitUsdt = peakIdx >= 0 ? c.getDouble(peakIdx) : 0;
@@ -188,7 +193,7 @@ public final class Db extends SQLiteOpenHelper {
         v.put("trade_id", t.tradeId); v.put("symbol", t.symbol); v.put("side", t.side); v.put("opened_at", t.openedAtMs);
         v.put("entry", t.entryPrice); v.put("initial_qty", t.initialQty); v.put("current_qty", t.currentQty);
         v.put("initial_stop", t.initialStop); v.put("current_stop", t.currentStop); v.put("risk_distance", t.riskDistance);
-        v.put("target_risk", t.targetRiskUsdt); v.put("atr", t.atr); v.put("taker_fee", t.takerFee);
+        v.put("target_risk", t.targetRiskUsdt); v.put("atr", t.atr); v.put("entry_atr", t.entryAtr); v.put("taker_fee", t.takerFee);
         v.put("spread", t.spreadAtEntry); v.put("cost_r", t.costREst); v.put("state", t.state);
         v.put("high_water", t.highWater); v.put("low_water", t.lowWater); v.put("peak_profit", t.peakProfitUsdt); v.put("protected_profit", t.protectedProfitUsdt);
         v.put("reduced", t.reduced ? 1 : 0); v.put("be_armed", t.beArmed ? 1 : 0); v.put("trailing", t.trailing ? 1 : 0); v.put("structure_break", t.structureBreak ? 1 : 0);

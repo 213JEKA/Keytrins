@@ -38,8 +38,11 @@ public final class LiveResearchEngine implements AutoCloseable {
     private static final double DOLLAR_LOCK_STEP_USDT = 0.50;
     private static final double DOLLAR_LOCK_LAG_USDT = 0.50;
     private static final double HEDGE_TRIGGER_ATR = 0.15;
+    private static final double HEDGE_TRIGGER_R_BACKSTOP = -0.15;
     private static final double HEDGE_EMERGENCY_STOP_ATR = 0.20;
     private static final long HEDGE_UNKNOWN_WAIT_MS = 60_000L;
+    private static final long HEDGE_RETRY_MS = 5_000L;
+    private static final long HEDGE_OPEN_GRACE_MS = 8_000L;
     private static final long MANAGE_INTERVAL_MS = 1_000L;
     private static final long BALANCE_REFRESH_MS = 5_000L;
 
@@ -208,6 +211,7 @@ public final class LiveResearchEngine implements AutoCloseable {
         log(String.format(Locale.US,"%s %s qty=%s R=$%.2f cost/R=%.2f score=%.1f",sig.direction,symbol,Decimals.fmt(qty),actualRisk,costR,sig.trendScore));
         if(!s.live)return;
 
+        HedgeState staleHedge=hedges.remove(symbol); if(staleHedge!=null) db.deleteHedge(symbol);
         try { api.switchToHedgeMode(symbol); }
         catch(Exception e){ db.logSignal(symbol,"REJECT","HEDGE_MODE_FAIL",sig,q,costR); log("ENTRY BLOCK "+symbol+": Hedge Mode недоступен: "+err(e)); return; }
         int primaryIdx="Buy".equals(side)?1:2;
@@ -217,7 +221,7 @@ public final class LiveResearchEngine implements AutoCloseable {
         double actualEntry=p.avgPrice>0?p.avgPrice:entry, actualQty=p.size;
         TradeState tr=new TradeState(); tr.tradeId=tradeId; tr.symbol=symbol; tr.side=side; tr.openedAtMs=System.currentTimeMillis();
         tr.entryPrice=actualEntry; tr.initialQty=actualQty; tr.currentQty=actualQty; tr.initialStop=stopQ.doubleValue(); tr.currentStop=stopQ.doubleValue();
-        tr.riskDistance=Math.abs(actualEntry-tr.initialStop); tr.targetRiskUsdt=s.riskUsdt; tr.atr=sig.m15Atr; tr.takerFee=taker;
+        tr.riskDistance=Math.abs(actualEntry-tr.initialStop); tr.targetRiskUsdt=s.riskUsdt; tr.atr=sig.m15Atr; tr.entryAtr=sig.m15Atr; tr.takerFee=taker;
         tr.spreadAtEntry=spread; tr.costREst=costR; tr.state="OPEN"; tr.highWater=actualEntry; tr.lowWater=actualEntry;
         tr.peakProfitUsdt=0; tr.protectedProfitUsdt=0;
         trades.put(symbol,tr); db.upsertTrade(tr); db.logSignal(symbol,"ENTRY","FILLED",sig,actualQty,costR);
@@ -257,11 +261,19 @@ public final class LiveResearchEngine implements AutoCloseable {
                         if(existingProtection>tr.protectedProfitUsdt)tr.protectedProfitUsdt=existingProtection;
                     }
 
-                    if(hedge==null) maybeOpenHedge(tr,inst,primary,tk,mark);
-                    hedge=hedges.get(symbol);
-                    if(hedge!=null){
-                        Position hp=findPosition(positions,symbol,hedge.positionIdx,hedge.side);
-                        if(hp!=null && primaryEstimatedNet(tr,inst,mark)>0) maybeCloseHedgeOnPrimaryRecovery(tr,hedge,inst,hp);
+                    String expectedHedgeSide="Buy".equals(tr.side)?"Sell":"Buy";
+                    int expectedHedgeIdx="Buy".equals(expectedHedgeSide)?1:2;
+                    Position exchangeHedge=findPosition(positions,symbol,expectedHedgeIdx,expectedHedgeSide);
+                    if(exchangeHedge!=null){
+                        if(hedge==null || !tr.tradeId.equals(hedge.primaryTradeId) || !hedgeIsPotentiallyAlive(hedge)){
+                            hedge=recoverHedgeState(tr,exchangeHedge);
+                        }
+                    } else if(hedgeAttemptAllowed(tr,hedge)){
+                        maybeOpenHedge(tr,inst,primary,tk,mark);
+                        hedge=hedges.get(symbol);
+                    }
+                    if(exchangeHedge!=null && hedge!=null && primaryEstimatedNet(tr,inst,mark)>0){
+                        maybeCloseHedgeOnPrimaryRecovery(tr,hedge,inst,exchangeHedge);
                     }
 
                     double r=priceR(tr,mark);
@@ -294,9 +306,14 @@ public final class LiveResearchEngine implements AutoCloseable {
     }
 
     private void maybeOpenHedge(TradeState tr, Instrument inst, Position primary, Ticker tk, double mark) throws Exception {
-        if(inst==null||primary==null||tr.atr<=0||tr.currentQty<=0)return;
+        if(inst==null||primary==null||tr.currentQty<=0)return;
+        double triggerAtr=tr.entryAtr>0?tr.entryAtr:tr.atr; if(!(triggerAtr>0))return;
         double adverse="Buy".equals(tr.side)?tr.entryPrice-mark:mark-tr.entryPrice;
-        if(adverse+1e-12 < HEDGE_TRIGGER_ATR*tr.atr)return;
+        double rNow=priceR(tr,mark);
+        boolean atrCross=adverse+1e-12 >= HEDGE_TRIGGER_ATR*triggerAtr;
+        boolean rBackstop=rNow<=HEDGE_TRIGGER_R_BACKSTOP;
+        if(!atrCross&&!rBackstop)return;
+        db.event("INFO","HEDGE_TRIGGER","adverse="+adverse+" entryATR="+triggerAtr+" r="+rNow,tr.symbol,tr.tradeId);
         if(primary.positionIdx==0){
             HedgeState h=new HedgeState(); h.primaryTradeId=tr.tradeId; h.symbol=tr.symbol; h.side="Buy".equals(tr.side)?"Sell":"Buy";
             h.state="UNAVAILABLE_ONE_WAY"; h.lastAttemptMs=System.currentTimeMillis(); hedges.put(tr.symbol,h); db.upsertHedge(h);
@@ -311,13 +328,13 @@ public final class LiveResearchEngine implements AutoCloseable {
         double entryRef="Buy".equals(hedgeSide)?positive(tk==null?0:tk.ask,tk==null?0:tk.last,mark):positive(tk==null?0:tk.bid,tk==null?0:tk.last,mark);
         if(entryRef<=0)return;
         if(qty.multiply(Decimals.bd(entryRef)).compareTo(inst.minNotional)<0)return;
-        double rawStop="Buy".equals(hedgeSide)?entryRef-HEDGE_EMERGENCY_STOP_ATR*tr.atr:entryRef+HEDGE_EMERGENCY_STOP_ATR*tr.atr;
+        double rawStop="Buy".equals(hedgeSide)?entryRef-HEDGE_EMERGENCY_STOP_ATR*triggerAtr:entryRef+HEDGE_EMERGENCY_STOP_ATR*triggerAtr;
         BigDecimal stopQ=stopPrice(inst,hedgeSide,rawStop);
 
         HedgeState h=new HedgeState();
         h.primaryTradeId=tr.tradeId; h.symbol=tr.symbol; h.side=hedgeSide; h.positionIdx=hedgeIdx; h.state="PENDING";
         h.openedAtMs=System.currentTimeMillis(); h.lastAttemptMs=h.openedAtMs; h.entryPrice=entryRef; h.initialQty=qty.doubleValue(); h.currentQty=qty.doubleValue();
-        h.initialStop=stopQ.doubleValue(); h.currentStop=stopQ.doubleValue(); h.atr=tr.atr; h.takerFee=tr.takerFee; h.spreadAtEntry=tr.spreadAtEntry;
+        h.initialStop=stopQ.doubleValue(); h.currentStop=stopQ.doubleValue(); h.atr=triggerAtr; h.takerFee=tr.takerFee; h.spreadAtEntry=tr.spreadAtEntry;
         h.highWater=entryRef; h.lowWater=entryRef;
         hedges.put(tr.symbol,h); db.upsertHedge(h);
 
@@ -366,7 +383,9 @@ public final class LiveResearchEngine implements AutoCloseable {
     private void manageHedge(TradeState tr, HedgeState h, Instrument inst, Ticker tk, Position hp) throws Exception {
         if(h==null)return;
         if(hp==null){
-            if(("PENDING".equals(h.state)||"OPEN_UNKNOWN".equals(h.state)||"CLOSE_UNKNOWN".equals(h.state)) && System.currentTimeMillis()-h.lastAttemptMs < HEDGE_UNKNOWN_WAIT_MS)return;
+            long age=System.currentTimeMillis()-h.lastAttemptMs;
+            if(age < HEDGE_OPEN_GRACE_MS)return;
+            if(("PENDING".equals(h.state)||"OPEN_UNKNOWN".equals(h.state)||"CLOSE_UNKNOWN".equals(h.state)) && age < HEDGE_UNKNOWN_WAIT_MS)return;
             if(!"UNAVAILABLE_ONE_WAY".equals(h.state)&&!"REJECTED".equals(h.state)){
                 h.currentQty=0; if(!"CLOSED_RECOVERY".equals(h.state))h.state="CLOSED"; db.upsertHedge(h);
                 db.event("INFO","HEDGE_CLOSED","exchange hedge position absent",h.symbol,tr.tradeId);
@@ -375,7 +394,7 @@ public final class LiveResearchEngine implements AutoCloseable {
             return;
         }
         if(inst==null)return;
-        if("PENDING".equals(h.state)||"OPEN_UNKNOWN".equals(h.state)||"REJECTED".equals(h.state))h.state="OPEN";
+        if(!"BE".equals(h.state)&&!"DOLLAR_LOCK".equals(h.state)&&!"CLOSE_PENDING".equals(h.state)&&!"CLOSE_UNKNOWN".equals(h.state))h.state="OPEN";
         h.positionIdx=hp.positionIdx; h.currentQty=hp.size;
         if(h.entryPrice<=0)h.entryPrice=hp.avgPrice; if(h.initialQty<=0)h.initialQty=hp.size;
         double mark=tk==null?hp.markPrice:positive(tk.mark,tk.last,hp.markPrice); if(mark<=0)return;
@@ -401,6 +420,12 @@ public final class LiveResearchEngine implements AutoCloseable {
                 double actual=estimatedHedgeProtectedAtStop(h,inst,h.currentStop); if(actual>h.protectedProfitUsdt)h.protectedProfitUsdt=actual;
                 log(String.format(Locale.US,"HEDGE LOCK %s peak=$%.3f target=$%.2f protected~$%.3f stop=%s",
                         h.symbol,h.peakProfitUsdt,protectedUsd,h.protectedProfitUsdt,Decimals.fmt(q)));
+            } else if(hedgeFloorAlreadyCrossed(h,candidate,mark)){
+                double netNow=estimatedHedgeNetAtMark(h,inst,mark);
+                if(netNow<=protectedUsd+0.05){
+                    marketCloseForMissedHedgeLock(tr,h,inst,hp,protectedUsd,netNow);
+                    return;
+                }
             }
         }
         db.upsertHedge(h);
@@ -440,6 +465,27 @@ public final class LiveResearchEngine implements AutoCloseable {
         return h!=null && !("CLOSED".equals(h.state)||"CLOSED_RECOVERY".equals(h.state)||"REJECTED".equals(h.state)||"UNAVAILABLE_ONE_WAY".equals(h.state));
     }
 
+    private boolean hedgeAttemptAllowed(TradeState tr,HedgeState h){
+        if(h==null)return true;
+        if(!tr.tradeId.equals(h.primaryTradeId))return true;
+        String st=h.state==null?"":h.state;
+        if("PENDING".equals(st)||"OPEN_UNKNOWN".equals(st)||"CLOSE_PENDING".equals(st)||"CLOSE_UNKNOWN".equals(st))return false;
+        if("UNAVAILABLE_ONE_WAY".equals(st))return false;
+        if("OPEN".equals(st)||"BE".equals(st)||"DOLLAR_LOCK".equals(st)||"OPEN_RECOVERED".equals(st))return false;
+        return System.currentTimeMillis()-h.lastAttemptMs>=HEDGE_RETRY_MS;
+    }
+
+    private HedgeState recoverHedgeState(TradeState tr,Position hp){
+        HedgeState h=new HedgeState();
+        h.primaryTradeId=tr.tradeId; h.symbol=tr.symbol; h.side=hp.side; h.positionIdx=hp.positionIdx; h.state="OPEN_RECOVERED";
+        h.openedAtMs=System.currentTimeMillis(); h.lastAttemptMs=h.openedAtMs; h.entryPrice=hp.avgPrice; h.initialQty=hp.size; h.currentQty=hp.size;
+        h.initialStop=hp.stopLoss; h.currentStop=hp.stopLoss; h.atr=tr.entryAtr>0?tr.entryAtr:tr.atr; h.takerFee=tr.takerFee; h.spreadAtEntry=tr.spreadAtEntry;
+        h.highWater=hp.avgPrice; h.lowWater=hp.avgPrice; hedges.put(tr.symbol,h); db.upsertHedge(h);
+        db.event("WARN","HEDGE_RECOVERED","exchange hedge existed without live local state idx="+hp.positionIdx,tr.symbol,tr.tradeId);
+        log("HEDGE RECOVERED "+tr.symbol+" idx="+hp.positionIdx+" qty="+hp.size);
+        return h;
+    }
+
     private boolean hedgeStopImproves(HedgeState h,Instrument inst,double candidate,double mark){
         double min=inst.tickSize.doubleValue()*2;
         if("Buy".equals(h.side))return candidate>h.currentStop+min&&candidate<mark-inst.tickSize.doubleValue();
@@ -455,6 +501,40 @@ public final class LiveResearchEngine implements AutoCloseable {
         double gross="Buy".equals(h.side)?(stop-h.entryPrice)*h.currentQty:(h.entryPrice-stop)*h.currentQty;
         double costPerUnit=h.entryPrice*(2*h.takerFee)+h.spreadAtEntry+2*inst.tickSize.doubleValue();
         return Math.max(0.0,gross-costPerUnit*h.currentQty);
+    }
+
+    private boolean dollarFloorAlreadyCrossed(TradeState tr,double candidate,double mark){
+        return "Buy".equals(tr.side)?mark<=candidate:mark>=candidate;
+    }
+
+    private boolean hedgeFloorAlreadyCrossed(HedgeState h,double candidate,double mark){
+        return "Buy".equals(h.side)?mark<=candidate:mark>=candidate;
+    }
+
+    private double estimatedHedgeNetAtMark(HedgeState h,Instrument inst,double mark){
+        if(h.currentQty<=0)return 0;
+        double gross="Buy".equals(h.side)?(mark-h.entryPrice)*h.currentQty:(h.entryPrice-mark)*h.currentQty;
+        double costPerUnit=h.entryPrice*(2*h.takerFee)+h.spreadAtEntry+2*inst.tickSize.doubleValue();
+        return gross-costPerUnit*h.currentQty;
+    }
+
+    private void marketCloseForMissedPrimaryLock(TradeState tr,Instrument inst,int positionIdx,double peak,double target,double netNow)throws Exception{
+        BigDecimal close=fullCloseQty(inst,tr.currentQty); if(close==null)return;
+        String opposite="Buy".equals(tr.side)?"Sell":"Buy"; double before=tr.currentQty;
+        api.reducePosition("PLC"+System.currentTimeMillis(),tr.symbol,opposite,Decimals.fmt(close),positionIdx);
+        Position after=api.waitReduced(tr.symbol,positionIdx,before,8_000L); tr.currentQty=after==null?0:after.size;
+        tr.state=after==null?"PROFIT_LOCK_CATCHUP_EXIT":"PROFIT_LOCK_CATCHUP"; tr.beArmed=true;
+        db.event("WARN","PROFIT_LOCK_CATCHUP","peak="+peak+" target="+target+" netNow="+netNow,tr.symbol,tr.tradeId);
+        log(String.format(Locale.US,"PROFIT LOCK CATCH-UP %s peak=$%.2f target=$%.2f netNow=$%.2f remain=%.8f",tr.symbol,peak,target,netNow,tr.currentQty));
+    }
+
+    private void marketCloseForMissedHedgeLock(TradeState tr,HedgeState h,Instrument inst,Position hp,double target,double netNow)throws Exception{
+        BigDecimal close=Decimals.floorStep(Decimals.bd(hp.size),inst.qtyStep); if(close.signum()<=0)return;
+        String closeSide="Buy".equals(h.side)?"Sell":"Buy"; double before=hp.size;
+        api.reducePosition("HLC"+System.currentTimeMillis(),h.symbol,closeSide,Decimals.fmt(close),h.positionIdx);
+        Position after=api.waitReduced(h.symbol,h.positionIdx,before,8_000L); h.currentQty=after==null?0:after.size; h.state=after==null?"CLOSED_LOCK_CATCHUP":"OPEN"; h.lastAttemptMs=System.currentTimeMillis(); db.upsertHedge(h);
+        db.event("WARN","HEDGE_LOCK_CATCHUP","target="+target+" netNow="+netNow,h.symbol,tr.tradeId);
+        log(String.format(Locale.US,"HEDGE LOCK CATCH-UP %s target=$%.2f netNow=$%.2f remain=%.8f",h.symbol,target,netNow,h.currentQty));
     }
 
     private boolean maybeReduce(TradeState tr,Instrument inst,double r,int positionIdx)throws Exception{
@@ -519,6 +599,12 @@ public final class LiveResearchEngine implements AutoCloseable {
                 log(String.format(Locale.US,
                         "DOLLAR LOCK %s peak=$%.3f target=$%.2f protected~$%.3f stop=%s",
                         tr.symbol,peakGrossUsd,protectedUsd,tr.protectedProfitUsdt,Decimals.fmt(q)));
+            } else if(dollarFloorAlreadyCrossed(tr,dollarCandidate,mark)){
+                double netNow=primaryEstimatedNet(tr,inst,mark);
+                if(netNow<=protectedUsd+0.05){
+                    marketCloseForMissedPrimaryLock(tr,inst,positionIdx,peakGrossUsd,protectedUsd,netNow);
+                    return;
+                }
             }
         }
 
