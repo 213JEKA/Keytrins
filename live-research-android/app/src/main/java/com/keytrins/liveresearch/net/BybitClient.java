@@ -1,0 +1,310 @@
+package com.keytrins.liveresearch.net;
+
+import com.keytrins.liveresearch.SettingsStore;
+import com.keytrins.liveresearch.model.Candle;
+import com.keytrins.liveresearch.model.Instrument;
+import com.keytrins.liveresearch.model.Position;
+import com.keytrins.liveresearch.model.Ticker;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.math.BigDecimal;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+public final class BybitClient implements AutoCloseable {
+    private final SettingsStore.Snapshot s;
+    private final String base;
+    private static final long RECV_WINDOW = 5000L;
+
+    public BybitClient(SettingsStore.Snapshot s) {
+        this.s = s;
+        this.base = s.testnet ? "https://api-testnet.bybit.com" : "https://api.bybit.com";
+    }
+
+    public long serverTimeMs() throws Exception {
+        JSONObject r = publicGet("/v5/market/time", new LinkedHashMap<>());
+        JSONObject result = r.optJSONObject("result");
+        if (result != null) {
+            String sec = result.optString("timeSecond", "");
+            if (!sec.isEmpty()) return Long.parseLong(sec) * 1000L;
+            String nano = result.optString("timeNano", "");
+            if (!nano.isEmpty()) return Long.parseLong(nano.substring(0, Math.min(13, nano.length())));
+        }
+        return r.optLong("time", System.currentTimeMillis());
+    }
+
+    public Map<String, Instrument> getInstruments() throws Exception {
+        Map<String, Instrument> out = new HashMap<>();
+        String cursor = "";
+        do {
+            LinkedHashMap<String,String> q = new LinkedHashMap<>();
+            q.put("category", "linear"); q.put("limit", "1000");
+            if (!cursor.isEmpty()) q.put("cursor", cursor);
+            JSONObject r = publicGet("/v5/market/instruments-info", q);
+            JSONObject result = result(r);
+            JSONArray list = result.getJSONArray("list");
+            for (int i = 0; i < list.length(); i++) {
+                JSONObject x = list.getJSONObject(i);
+                String symbol = x.optString("symbol");
+                String settle = x.optString("settleCoin");
+                String status = x.optString("status");
+                if (!"USDT".equals(settle) || !"Trading".equals(status) || !symbol.endsWith("USDT")) continue;
+                JSONObject pf = x.getJSONObject("priceFilter");
+                JSONObject lf = x.getJSONObject("lotSizeFilter");
+                BigDecimal tick = bd(pf.optString("tickSize", "0.00000001"));
+                BigDecimal step = bd(lf.optString("qtyStep", "0.000001"));
+                BigDecimal minQty = bd(lf.optString("minOrderQty", "0"));
+                String maxMarket = lf.optString("maxMktOrderQty", lf.optString("maxMarketOrderQty", "999999999"));
+                BigDecimal maxQty = bd(maxMarket.isEmpty() ? "999999999" : maxMarket);
+                BigDecimal minNotional = bd(lf.optString("minNotionalValue", "0"));
+                out.put(symbol, new Instrument(symbol, x.optString("baseCoin"), tick, step, minQty, maxQty, minNotional));
+            }
+            cursor = result.optString("nextPageCursor", "");
+        } while (!cursor.isEmpty());
+        return out;
+    }
+
+    public Map<String, Ticker> getAllTickers() throws Exception {
+        LinkedHashMap<String,String> q = new LinkedHashMap<>(); q.put("category", "linear");
+        JSONObject r = publicGet("/v5/market/tickers", q);
+        JSONArray list = result(r).getJSONArray("list");
+        Map<String,Ticker> out = new HashMap<>();
+        for (int i=0; i<list.length(); i++) {
+            JSONObject x = list.getJSONObject(i);
+            String symbol = x.optString("symbol");
+            if (!symbol.endsWith("USDT")) continue;
+            out.put(symbol, new Ticker(symbol,
+                    d(x,"lastPrice"), d(x,"markPrice"), d(x,"bid1Price"), d(x,"ask1Price"),
+                    d(x,"turnover24h"), d(x,"fundingRate")));
+        }
+        return out;
+    }
+
+    public List<Candle> getKlines(String symbol, String interval, int limit) throws Exception {
+        LinkedHashMap<String,String> q = new LinkedHashMap<>();
+        q.put("category","linear"); q.put("symbol",symbol); q.put("interval",interval); q.put("limit",Integer.toString(limit));
+        JSONObject r = publicGet("/v5/market/kline", q);
+        JSONArray rows = result(r).getJSONArray("list");
+        List<Candle> out = new ArrayList<>();
+        for (int i=0;i<rows.length();i++) {
+            JSONArray x = rows.getJSONArray(i);
+            out.add(new Candle(Long.parseLong(x.getString(0)),
+                    Double.parseDouble(x.getString(1)), Double.parseDouble(x.getString(2)),
+                    Double.parseDouble(x.getString(3)), Double.parseDouble(x.getString(4)),
+                    Double.parseDouble(x.getString(5)), Double.parseDouble(x.getString(6))));
+        }
+        out.sort(Comparator.comparingLong(c -> c.startMs));
+        long intervalMs = "60".equals(interval) ? 60*60_000L : 15*60_000L;
+        long now = System.currentTimeMillis();
+        out.removeIf(c -> c.startMs + intervalMs > now);
+        return out;
+    }
+
+    public double feeRate(String symbol) {
+        if (s.apiKey.isEmpty() || s.apiSecret.isEmpty()) return s.defaultTakerFee;
+        try {
+            LinkedHashMap<String,String> q = new LinkedHashMap<>(); q.put("category","linear"); q.put("symbol",symbol);
+            JSONObject r = privateGet("/v5/account/fee-rate", q);
+            JSONArray list = result(r).getJSONArray("list");
+            if (list.length() > 0) return d(list.getJSONObject(0), "takerFeeRate");
+        } catch (Exception ignored) {}
+        return s.defaultTakerFee;
+    }
+
+    public double walletBalanceUsdt() throws Exception {
+        LinkedHashMap<String,String> q = new LinkedHashMap<>(); q.put("accountType","UNIFIED"); q.put("coin","USDT");
+        JSONObject r = privateGet("/v5/account/wallet-balance", q);
+        JSONArray accounts = result(r).getJSONArray("list");
+        if (accounts.length()==0) return 0;
+        JSONObject a = accounts.getJSONObject(0);
+        String total = a.optString("totalWalletBalance", "");
+        if (!total.isEmpty()) return Double.parseDouble(total);
+        JSONArray coins = a.optJSONArray("coin");
+        if (coins != null) for (int i=0;i<coins.length();i++) {
+            JSONObject c = coins.getJSONObject(i);
+            if ("USDT".equals(c.optString("coin"))) return d(c,"walletBalance");
+        }
+        return 0;
+    }
+
+    public Map<String, Position> openPositions() throws Exception {
+        LinkedHashMap<String,String> q = new LinkedHashMap<>();
+        q.put("category","linear"); q.put("settleCoin","USDT"); q.put("limit","200");
+        JSONObject r = privateGet("/v5/position/list", q);
+        JSONArray list = result(r).getJSONArray("list");
+        Map<String,Position> out = new HashMap<>();
+        for (int i=0;i<list.length();i++) {
+            JSONObject x = list.getJSONObject(i);
+            double size = d(x,"size"); if (size <= 0) continue;
+            Position p = new Position(x.optString("symbol"), x.optString("side"), size,
+                    d(x,"avgPrice"), d(x,"markPrice"), d(x,"stopLoss"), x.optInt("positionIdx",0));
+            out.put(p.symbol,p);
+        }
+        return out;
+    }
+
+    public Position position(String symbol) throws Exception {
+        LinkedHashMap<String,String> q = new LinkedHashMap<>(); q.put("category","linear"); q.put("symbol",symbol);
+        JSONObject r = privateGet("/v5/position/list", q);
+        JSONArray list = result(r).getJSONArray("list");
+        for (int i=0;i<list.length();i++) {
+            JSONObject x = list.getJSONObject(i); double size=d(x,"size"); if(size<=0) continue;
+            return new Position(symbol,x.optString("side"),size,d(x,"avgPrice"),d(x,"markPrice"),d(x,"stopLoss"),x.optInt("positionIdx",0));
+        }
+        return null;
+    }
+
+    public double[] transactionSummary(String symbol, long startMs, long endMs) throws Exception {
+        double gross = 0, fees = 0, funding = 0, net = 0;
+        long windowStart = Math.max(0, startMs - 10_000L);
+        long finalEnd = Math.max(windowStart + 1, endMs);
+        while (windowStart < finalEnd) {
+            long windowEnd = Math.min(finalEnd, windowStart + 7L * 24 * 60 * 60_000L - 1);
+            String cursor = "";
+            do {
+                LinkedHashMap<String,String> q = new LinkedHashMap<>();
+                q.put("accountType","UNIFIED"); q.put("category","linear"); q.put("currency","USDT");
+                q.put("startTime",Long.toString(windowStart)); q.put("endTime",Long.toString(windowEnd)); q.put("limit","50");
+                if (!cursor.isEmpty()) q.put("cursor",cursor);
+                JSONObject r = privateGet("/v5/account/transaction-log", q);
+                JSONObject rr = result(r); JSONArray list = rr.getJSONArray("list");
+                for (int i=0;i<list.length();i++) {
+                    JSONObject x = list.getJSONObject(i); if (!symbol.equals(x.optString("symbol"))) continue;
+                    gross += d(x,"cashFlow"); fees += d(x,"fee"); funding += d(x,"funding"); net += d(x,"change");
+                }
+                cursor = rr.optString("nextPageCursor","");
+            } while (!cursor.isEmpty());
+            windowStart = windowEnd + 1;
+        }
+        return new double[]{gross, fees, funding, net};
+    }
+
+    public void setLeverage(String symbol, int leverage) throws Exception {
+        LinkedHashMap<String,Object> b = new LinkedHashMap<>();
+        b.put("category","linear"); b.put("symbol",symbol); b.put("buyLeverage",Integer.toString(leverage)); b.put("sellLeverage",Integer.toString(leverage));
+        try { privatePost("/v5/position/set-leverage", b); }
+        catch (ApiException e) {
+            if (e.code != 110043 && !e.getMessage().toLowerCase(Locale.US).contains("not modified")) throw e;
+        }
+    }
+
+    public String placeEntry(String tradeId, String symbol, String side, String qty, String stopLoss) throws Exception {
+        setLeverage(symbol, s.leverage);
+        LinkedHashMap<String,Object> b = new LinkedHashMap<>();
+        b.put("category","linear"); b.put("symbol",symbol); b.put("side",side); b.put("orderType","Market");
+        b.put("qty",qty); b.put("positionIdx",0); b.put("reduceOnly",false); b.put("orderLinkId",shortId(tradeId));
+        b.put("stopLoss",stopLoss); b.put("slTriggerBy","MarkPrice"); b.put("tpslMode","Full"); b.put("slOrderType","Market");
+        JSONObject r = privatePost("/v5/order/create", b);
+        return result(r).optString("orderId", "");
+    }
+
+    public String reducePosition(String tradeId, String symbol, String side, String qty) throws Exception {
+        LinkedHashMap<String,Object> b = new LinkedHashMap<>();
+        b.put("category","linear"); b.put("symbol",symbol); b.put("side",side); b.put("orderType","Market");
+        b.put("qty",qty); b.put("positionIdx",0); b.put("reduceOnly",true); b.put("orderLinkId",shortId(tradeId+"_RED"));
+        JSONObject r = privatePost("/v5/order/create", b);
+        return result(r).optString("orderId", "");
+    }
+
+    public void setStop(String symbol, String stopLoss) throws Exception {
+        LinkedHashMap<String,Object> b = new LinkedHashMap<>();
+        b.put("category","linear"); b.put("symbol",symbol); b.put("tpslMode","Full"); b.put("positionIdx",0);
+        b.put("stopLoss",stopLoss); b.put("slTriggerBy","MarkPrice");
+        privatePost("/v5/position/trading-stop", b);
+    }
+
+    public Position waitPosition(String symbol, long timeoutMs) throws Exception {
+        long end = System.currentTimeMillis()+timeoutMs;
+        while(System.currentTimeMillis()<end) {
+            Position p=position(symbol); if(p!=null && p.size>0) return p;
+            Thread.sleep(350);
+        }
+        throw new IllegalStateException("Позиция не появилась после подтверждения ордера: "+symbol);
+    }
+
+    public Position waitReduced(String symbol, double before, long timeoutMs) throws Exception {
+        long end=System.currentTimeMillis()+timeoutMs;
+        while(System.currentTimeMillis()<end) {
+            Position p=position(symbol); if(p==null || p.size < before) return p;
+            Thread.sleep(250);
+        }
+        throw new IllegalStateException("Сокращение позиции не подтверждено: "+symbol);
+    }
+
+    private JSONObject publicGet(String path, LinkedHashMap<String,String> params) throws Exception {
+        String query = query(params);
+        return request("GET", path + (query.isEmpty()?"":"?"+query), null, null);
+    }
+
+    private JSONObject privateGet(String path, LinkedHashMap<String,String> params) throws Exception {
+        requireKey();
+        String query=query(params); long ts=System.currentTimeMillis();
+        String sign=hmac(ts+s.apiKey+RECV_WINDOW+query, s.apiSecret);
+        Map<String,String> h=authHeaders(ts,sign);
+        return request("GET",path+(query.isEmpty()?"":"?"+query),null,h);
+    }
+
+    private JSONObject privatePost(String path, LinkedHashMap<String,Object> body) throws Exception {
+        requireKey();
+        String json=json(body); long ts=System.currentTimeMillis();
+        String sign=hmac(ts+s.apiKey+RECV_WINDOW+json, s.apiSecret);
+        Map<String,String> h=authHeaders(ts,sign); h.put("Content-Type","application/json");
+        return request("POST",path,json,h);
+    }
+
+    private Map<String,String> authHeaders(long ts,String sign){
+        Map<String,String> h=new HashMap<>();
+        h.put("X-BAPI-API-KEY",s.apiKey); h.put("X-BAPI-TIMESTAMP",Long.toString(ts)); h.put("X-BAPI-SIGN",sign);
+        h.put("X-BAPI-RECV-WINDOW",Long.toString(RECV_WINDOW)); return h;
+    }
+
+    private JSONObject request(String method,String path,String body,Map<String,String> headers) throws Exception {
+        HttpURLConnection c=(HttpURLConnection)new URL(base+path).openConnection();
+        c.setRequestMethod(method); c.setConnectTimeout(10_000); c.setReadTimeout(15_000); c.setUseCaches(false);
+        c.setRequestProperty("User-Agent","LiveResearchAndroid/0.1");
+        if(headers!=null) for(Map.Entry<String,String> e:headers.entrySet()) c.setRequestProperty(e.getKey(),e.getValue());
+        if(body!=null){ c.setDoOutput(true); try(OutputStream o=c.getOutputStream()){o.write(body.getBytes(StandardCharsets.UTF_8));}}
+        int code=c.getResponseCode(); InputStream in=code>=200&&code<300?c.getInputStream():c.getErrorStream();
+        String text=read(in); c.disconnect();
+        if(text.isEmpty()) throw new IllegalStateException("Пустой HTTP ответ "+code);
+        JSONObject r=new JSONObject(text); int ret=r.optInt("retCode",-1);
+        if(code<200||code>=300||ret!=0) throw new ApiException(ret,r.optString("retMsg","HTTP "+code),text);
+        return r;
+    }
+
+    private static JSONObject result(JSONObject r) throws Exception { return r.getJSONObject("result"); }
+    private static String read(InputStream in)throws Exception{ if(in==null)return""; StringBuilder b=new StringBuilder(); try(BufferedReader r=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){String line;while((line=r.readLine())!=null)b.append(line);}return b.toString();}
+    private static String query(LinkedHashMap<String,String> q)throws Exception{StringBuilder b=new StringBuilder();for(Map.Entry<String,String>e:q.entrySet()){if(b.length()>0)b.append('&');b.append(enc(e.getKey())).append('=').append(enc(e.getValue()));}return b.toString();}
+    private static String enc(String x)throws Exception{return URLEncoder.encode(x,StandardCharsets.UTF_8.name()).replace("+","%20");}
+    private static String hmac(String text,String secret)throws Exception{Mac m=Mac.getInstance("HmacSHA256");m.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8),"HmacSHA256"));byte[]a=m.doFinal(text.getBytes(StandardCharsets.UTF_8));StringBuilder b=new StringBuilder();for(byte x:a)b.append(String.format(Locale.US,"%02x",x));return b.toString();}
+    private static String json(LinkedHashMap<String,Object> m){StringBuilder b=new StringBuilder("{");boolean first=true;for(Map.Entry<String,Object>e:m.entrySet()){if(!first)b.append(',');first=false;b.append(JSONObject.quote(e.getKey())).append(':');Object v=e.getValue();if(v==null)b.append("null");else if(v instanceof Number||v instanceof Boolean)b.append(v.toString());else b.append(JSONObject.quote(v.toString()));}return b.append('}').toString();}
+    private static BigDecimal bd(String x){try{return new BigDecimal(x);}catch(Exception e){return BigDecimal.ZERO;}}
+    private static double d(JSONObject x,String k){try{String v=x.optString(k,"");return v.isEmpty()?0:Double.parseDouble(v);}catch(Exception e){return 0;}}
+    private static String shortId(String s){return s.length()<=36?s:s.substring(0,36);}
+    private void requireKey(){if(s.apiKey.isEmpty()||s.apiSecret.isEmpty())throw new IllegalStateException("API key/secret не заданы");}
+    @Override public void close() {}
+
+    public static final class ApiException extends Exception {
+        public final int code; public final String raw;
+        public ApiException(int code,String msg,String raw){super("Bybit "+code+": "+msg);this.code=code;this.raw=raw;}
+    }
+}
