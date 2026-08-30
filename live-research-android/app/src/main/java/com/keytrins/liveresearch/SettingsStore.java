@@ -89,6 +89,11 @@ public final class SettingsStore {
         p.edit().putLong("baselineBalanceBits", Double.doubleToRawLongBits(balance)).apply();
     }
 
+    public void setBaselineBalance(double balance) {
+        if (!(balance > 0)) return;
+        p.edit().putLong("baselineBalanceBits", Double.doubleToRawLongBits(balance)).apply();
+    }
+
     public void clearBaseline() {
         p.edit().remove("baselineBalanceBits").apply();
     }
