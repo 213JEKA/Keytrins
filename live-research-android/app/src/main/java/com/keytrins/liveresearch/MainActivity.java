@@ -18,10 +18,13 @@ import android.widget.Toast;
 import com.keytrins.liveresearch.model.Position;
 import com.keytrins.liveresearch.model.TradeState;
 import com.keytrins.liveresearch.net.BybitClient;
+import com.keytrins.liveresearch.net.BybitHistoryClient;
 import com.keytrins.liveresearch.storage.Db;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -60,7 +63,7 @@ public class MainActivity extends android.app.Activity {
         stop.setOnClickListener(v -> stopBot());
 
         requestNotificationPermission();
-        BotRuntime.log("Live Research v0.1.3 готов.");
+        BotRuntime.log("Live Research v0.1.3.2 готов.");
         refreshUiLoop();
     }
 
@@ -128,6 +131,7 @@ public class MainActivity extends android.app.Activity {
                         BotRuntime.entries, BotRuntime.reductions));
                 positionsText.setText(BotRuntime.positionsText);
                 if ((refreshTick++ % 3) == 0) {
+                    // SQLite remains a fallback. Bybit is the primary source of truth for the visible last-3 history.
                     historyText.setText(stripBalanceLines(dashboardDb.recentClosedTradesText(3)));
                     pollRealDashboard();
                 }
@@ -144,9 +148,21 @@ public class MainActivity extends android.app.Activity {
             return;
         }
         dashboardWorker.submit(() -> {
-            try (BybitClient api = new BybitClient(snap)) {
-                double balance = api.walletBalanceUsdt();
-                Map<String, Position> positions = api.openPositions();
+            try {
+                double balance;
+                Map<String, Position> positions;
+                try (BybitClient api = new BybitClient(snap)) {
+                    balance = api.walletBalanceUsdt();
+                    positions = api.openPositions();
+                }
+
+                List<BybitHistoryClient.ClosedTrade> closed = Collections.emptyList();
+                try (BybitHistoryClient historyApi = new BybitHistoryClient(snap)) {
+                    closed = historyApi.recentClosed(3);
+                } catch (Exception historyError) {
+                    BotRuntime.log("BYBIT HISTORY: " + historyError);
+                }
+
                 Map<String, TradeState> tracked = dashboardDb.openTrades();
                 BotRuntime.balance = balance;
                 BotRuntime.openPositions = positions.size();
@@ -164,10 +180,12 @@ public class MainActivity extends android.app.Activity {
 
                 final double b = balance;
                 final double inc = totalIncome;
+                final String bybitHistory = closed.isEmpty() ? null : renderBybitHistory(closed);
                 ui.post(() -> {
                     balanceText.setText(String.format(Locale.US, "%.2f", b));
                     incomeText.setText(String.format(Locale.US, "%+.2f", inc));
                     incomeText.setTextColor(getColor(inc >= 0 ? R.color.ok : R.color.danger));
+                    if (bybitHistory != null) historyText.setText(bybitHistory);
                 });
             } catch (Exception e) {
                 BotRuntime.log("DASHBOARD API: " + e);
@@ -212,6 +230,25 @@ public class MainActivity extends android.app.Activity {
             }
         }
         return b.toString();
+    }
+
+    private String renderBybitHistory(List<BybitHistoryClient.ClosedTrade> closed) {
+        SimpleDateFormat time = new SimpleDateFormat("dd.MM HH:mm", Locale.US);
+        StringBuilder b = new StringBuilder();
+        int count = Math.min(3, closed.size());
+        for (int i = 0; i < count; i++) {
+            BybitHistoryClient.ClosedTrade t = closed.get(i);
+            if (b.length() > 0) b.append("\n\n");
+            b.append(t.symbol).append("  •  ")
+                    .append(t.updatedTime > 0 ? time.format(new Date(t.updatedTime)) : "закрыта");
+            if (t.avgEntryPrice > 0 || t.avgExitPrice > 0) {
+                b.append(String.format(Locale.US,
+                        "\nEntry %.8f  →  Exit %.8f  •  Qty %.8f",
+                        t.avgEntryPrice, t.avgExitPrice, t.closedSize));
+            }
+            b.append(String.format(Locale.US, "\nРезультат: %+.3f USDT", t.closedPnl));
+        }
+        return b.length() == 0 ? "Закрытых сделок пока нет." : b.toString();
     }
 
     private String stripBalanceLines(String text) {
