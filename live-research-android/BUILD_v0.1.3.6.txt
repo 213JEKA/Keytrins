@@ -1,1 +1,1 @@
-Live Research Android v0.1.3.7 HedgeFix build trigger.
+Live Research Android v0.1.3.8 hedge execution reliability build trigger.
