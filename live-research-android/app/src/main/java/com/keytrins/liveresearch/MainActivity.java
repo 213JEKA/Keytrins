@@ -218,21 +218,16 @@ public class MainActivity extends android.app.Activity {
             TradeState t = tracked.get(p.symbol);
             HedgeState h = hedgeStates.get(p.symbol);
             boolean isHedge = h != null && p.side.equals(h.side) && (h.positionIdx==0 || p.positionIdx==h.positionIdx);
-            if (b.length() > 0) b.append("
-
-");
+            if (b.length() > 0) b.append("\n\n");
             String direction = "Buy".equals(p.side) ? "LONG" : "SHORT";
             String state = isHedge ? "HEDGE • "+h.state : (t == null ? "BYBIT" : t.state);
             b.append(p.symbol).append("  ").append(direction).append("  •  ").append(state);
-            b.append(String.format(Locale.US, "
-Entry %.8f   •   Mark %.8f   •   Qty %.8f", p.avgPrice, p.markPrice, p.size));
-            b.append(String.format(Locale.US, "
-PnL %+.3f USDT", p.unrealisedPnl));
+            b.append(String.format(Locale.US, "\nEntry %.8f   •   Mark %.8f   •   Qty %.8f", p.avgPrice, p.markPrice, p.size));
+            b.append(String.format(Locale.US, "\nPnL %+.3f USDT", p.unrealisedPnl));
             if(isHedge){
                 double sl=p.stopLoss>0?p.stopLoss:h.currentStop;
                 if(sl>0)b.append(String.format(Locale.US,"   •   SL %.8f",sl));
-                b.append(String.format(Locale.US,"
-Hedge peak %+.2f   •   Protected ~%+.2f USDT",
+                b.append(String.format(Locale.US,"\nHedge peak %+.2f   •   Protected ~%+.2f USDT",
                         Math.max(0.0,h.peakProfitUsdt),Math.max(0.0,h.protectedProfitUsdt)));
             } else if (t != null && p.side.equals(t.side)) {
                 double r = 0;
@@ -240,8 +235,7 @@ Hedge peak %+.2f   •   Protected ~%+.2f USDT",
                 b.append(String.format(Locale.US, "   •   %+.2fR", r));
                 double sl = p.stopLoss > 0 ? p.stopLoss : t.currentStop;
                 b.append(String.format(Locale.US, "   •   SL %.8f", sl));
-                b.append(String.format(Locale.US, "
-Peak %+.2f   •   Protected ~%+.2f USDT",
+                b.append(String.format(Locale.US, "\nPeak %+.2f   •   Protected ~%+.2f USDT",
                         Math.max(0.0, t.peakProfitUsdt), Math.max(0.0, t.protectedProfitUsdt)));
             } else if (p.stopLoss > 0) {
                 b.append(String.format(Locale.US, "   •   SL %.8f", p.stopLoss));
