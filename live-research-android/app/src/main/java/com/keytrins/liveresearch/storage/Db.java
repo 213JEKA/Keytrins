@@ -7,6 +7,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
 import com.keytrins.liveresearch.BotRuntime;
+import com.keytrins.liveresearch.model.HedgeState;
 import com.keytrins.liveresearch.model.Signal;
 import com.keytrins.liveresearch.model.TradeState;
 
@@ -17,7 +18,7 @@ import java.util.Locale;
 import java.util.Map;
 
 public final class Db extends SQLiteOpenHelper {
-    private static final int VERSION = 3;
+    private static final int VERSION = 4;
 
     public Db(Context c) { super(c, "live_research_android.db", null, VERSION); }
 
@@ -26,6 +27,7 @@ public final class Db extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE signals(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, symbol TEXT NOT NULL, signal_time INTEGER, decision TEXT, reason TEXT, score REAL, cost_r REAL, qty REAL, UNIQUE(symbol, signal_time, decision) ON CONFLICT IGNORE)");
         db.execSQL("CREATE TABLE scan_decisions(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, scan_time INTEGER, symbol TEXT NOT NULL, decision TEXT, reason TEXT)");
         db.execSQL("CREATE TABLE trades(trade_id TEXT PRIMARY KEY, symbol TEXT UNIQUE NOT NULL, side TEXT, opened_at INTEGER, entry REAL, initial_qty REAL, current_qty REAL, initial_stop REAL, current_stop REAL, risk_distance REAL, target_risk REAL, atr REAL, taker_fee REAL, spread REAL, cost_r REAL, state TEXT, high_water REAL, low_water REAL, peak_profit REAL DEFAULT 0, protected_profit REAL DEFAULT 0, reduced INTEGER, be_armed INTEGER, trailing INTEGER, structure_break INTEGER, structure_break_time INTEGER, balance_open REAL DEFAULT 0)");
+        db.execSQL("CREATE TABLE hedges(primary_trade_id TEXT PRIMARY KEY, symbol TEXT UNIQUE NOT NULL, side TEXT, position_idx INTEGER, state TEXT, opened_at INTEGER, last_attempt INTEGER, entry REAL, initial_qty REAL, current_qty REAL, initial_stop REAL, current_stop REAL, atr REAL, taker_fee REAL, spread REAL, high_water REAL, low_water REAL, peak_profit REAL DEFAULT 0, protected_profit REAL DEFAULT 0)");
         db.execSQL("CREATE TABLE closed_trades(id INTEGER PRIMARY KEY AUTOINCREMENT, trade_id TEXT, symbol TEXT, side TEXT, opened_at INTEGER, closed_at INTEGER, entry REAL, initial_qty REAL, target_risk REAL, gross REAL, fees REAL, funding REAL, net REAL, net_r REAL, peak_profit REAL DEFAULT 0, protected_profit REAL DEFAULT 0, reduced INTEGER, be_armed INTEGER, trailing INTEGER, balance_open REAL DEFAULT 0, balance_close REAL DEFAULT 0)");
         db.execSQL("CREATE INDEX idx_scan_time ON scan_decisions(scan_time)");
         db.execSQL("CREATE INDEX idx_closed_time ON closed_trades(closed_at DESC)");
@@ -45,6 +47,9 @@ public final class Db extends SQLiteOpenHelper {
             try { db.execSQL("ALTER TABLE trades ADD COLUMN protected_profit REAL DEFAULT 0"); } catch (Exception ignored) {}
             try { db.execSQL("ALTER TABLE closed_trades ADD COLUMN peak_profit REAL DEFAULT 0"); } catch (Exception ignored) {}
             try { db.execSQL("ALTER TABLE closed_trades ADD COLUMN protected_profit REAL DEFAULT 0"); } catch (Exception ignored) {}
+        }
+        if (oldVersion < 4) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS hedges(primary_trade_id TEXT PRIMARY KEY, symbol TEXT UNIQUE NOT NULL, side TEXT, position_idx INTEGER, state TEXT, opened_at INTEGER, last_attempt INTEGER, entry REAL, initial_qty REAL, current_qty REAL, initial_stop REAL, current_stop REAL, atr REAL, taker_fee REAL, spread REAL, high_water REAL, low_water REAL, peak_profit REAL DEFAULT 0, protected_profit REAL DEFAULT 0)");
         }
     }
 
@@ -124,6 +129,39 @@ public final class Db extends SQLiteOpenHelper {
             }
         }
         return out;
+    }
+
+
+    public synchronized void upsertHedge(HedgeState h) {
+        ContentValues v = new ContentValues();
+        v.put("primary_trade_id", h.primaryTradeId); v.put("symbol", h.symbol); v.put("side", h.side);
+        v.put("position_idx", h.positionIdx); v.put("state", h.state); v.put("opened_at", h.openedAtMs); v.put("last_attempt", h.lastAttemptMs);
+        v.put("entry", h.entryPrice); v.put("initial_qty", h.initialQty); v.put("current_qty", h.currentQty);
+        v.put("initial_stop", h.initialStop); v.put("current_stop", h.currentStop); v.put("atr", h.atr);
+        v.put("taker_fee", h.takerFee); v.put("spread", h.spreadAtEntry); v.put("high_water", h.highWater); v.put("low_water", h.lowWater);
+        v.put("peak_profit", h.peakProfitUsdt); v.put("protected_profit", h.protectedProfitUsdt);
+        getWritableDatabase().insertWithOnConflict("hedges", null, v, SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
+    public synchronized Map<String, HedgeState> openHedges() {
+        Map<String, HedgeState> out = new HashMap<>();
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT * FROM hedges", null)) {
+            while (c.moveToNext()) {
+                HedgeState h = new HedgeState();
+                h.primaryTradeId = s(c,"primary_trade_id"); h.symbol = s(c,"symbol"); h.side = s(c,"side"); h.state = s(c,"state");
+                h.positionIdx = i(c,"position_idx"); h.openedAtMs = l(c,"opened_at"); h.lastAttemptMs = l(c,"last_attempt");
+                h.entryPrice = d(c,"entry"); h.initialQty = d(c,"initial_qty"); h.currentQty = d(c,"current_qty");
+                h.initialStop = d(c,"initial_stop"); h.currentStop = d(c,"current_stop"); h.atr = d(c,"atr");
+                h.takerFee = d(c,"taker_fee"); h.spreadAtEntry = d(c,"spread"); h.highWater = d(c,"high_water"); h.lowWater = d(c,"low_water");
+                h.peakProfitUsdt = d(c,"peak_profit"); h.protectedProfitUsdt = d(c,"protected_profit");
+                out.put(h.symbol,h);
+            }
+        }
+        return out;
+    }
+
+    public synchronized void deleteHedge(String symbol) {
+        getWritableDatabase().delete("hedges", "symbol=?", new String[]{symbol});
     }
 
     public synchronized String recentClosedTradesText(int limit) {

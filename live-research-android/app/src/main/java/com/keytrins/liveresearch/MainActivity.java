@@ -15,6 +15,7 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.keytrins.liveresearch.model.HedgeState;
 import com.keytrins.liveresearch.model.Position;
 import com.keytrins.liveresearch.model.TradeState;
 import com.keytrins.liveresearch.net.BybitClient;
@@ -65,7 +66,7 @@ public class MainActivity extends android.app.Activity {
 
         historyText.setText(stripBalanceLines(dashboardDb.recentClosedTradesText(3)));
         requestNotificationPermission();
-        BotRuntime.log("Live Research v0.1.3.5 готов.");
+        BotRuntime.log("Live Research v0.1.3.6 Hedge готов.");
         refreshUiLoop();
     }
 
@@ -165,9 +166,10 @@ public class MainActivity extends android.app.Activity {
                 }
 
                 Map<String, TradeState> tracked = dashboardDb.openTrades();
+                Map<String, HedgeState> hedgeStates = dashboardDb.openHedges();
                 BotRuntime.balance = balance;
                 BotRuntime.openPositions = positions.size();
-                BotRuntime.positionsText = renderPositions(positions, tracked);
+                BotRuntime.positionsText = renderPositions(positions, tracked, hedgeStates);
 
                 double baseline = store.baselineBalance();
                 if (Double.isNaN(baseline)) {
@@ -207,29 +209,39 @@ public class MainActivity extends android.app.Activity {
         return 0.0;
     }
 
-    private String renderPositions(Map<String, Position> positions, Map<String, TradeState> tracked) {
+    private String renderPositions(Map<String, Position> positions, Map<String, TradeState> tracked, Map<String, HedgeState> hedgeStates) {
         if (positions == null || positions.isEmpty()) return "Открытых сделок нет.";
-        List<String> symbols = new ArrayList<>(positions.keySet());
-        Collections.sort(symbols);
+        List<Position> rows = new ArrayList<>(positions.values());
+        rows.sort((a,b) -> { int c=a.symbol.compareTo(b.symbol); return c!=0?c:Integer.compare(a.positionIdx,b.positionIdx); });
         StringBuilder b = new StringBuilder();
-        for (String symbol : symbols) {
-            Position p = positions.get(symbol);
-            TradeState t = tracked.get(symbol);
-            if (b.length() > 0) b.append("\n\n");
-            String state = t == null ? "BYBIT" : t.state;
-            double r = 0;
-            if (t != null && t.riskDistance > 0) {
-                r = "Buy".equals(t.side) ? (p.markPrice - t.entryPrice) / t.riskDistance : (t.entryPrice - p.markPrice) / t.riskDistance;
-            }
+        for (Position p : rows) {
+            TradeState t = tracked.get(p.symbol);
+            HedgeState h = hedgeStates.get(p.symbol);
+            boolean isHedge = h != null && p.side.equals(h.side) && (h.positionIdx==0 || p.positionIdx==h.positionIdx);
+            if (b.length() > 0) b.append("
+
+");
             String direction = "Buy".equals(p.side) ? "LONG" : "SHORT";
-            b.append(symbol).append("  ").append(direction).append("  •  ").append(state);
-            b.append(String.format(Locale.US, "\nEntry %.8f   •   Mark %.8f   •   Qty %.8f", p.avgPrice, p.markPrice, p.size));
-            b.append(String.format(Locale.US, "\nPnL %+.3f USDT", p.unrealisedPnl));
-            if (t != null) {
+            String state = isHedge ? "HEDGE • "+h.state : (t == null ? "BYBIT" : t.state);
+            b.append(p.symbol).append("  ").append(direction).append("  •  ").append(state);
+            b.append(String.format(Locale.US, "
+Entry %.8f   •   Mark %.8f   •   Qty %.8f", p.avgPrice, p.markPrice, p.size));
+            b.append(String.format(Locale.US, "
+PnL %+.3f USDT", p.unrealisedPnl));
+            if(isHedge){
+                double sl=p.stopLoss>0?p.stopLoss:h.currentStop;
+                if(sl>0)b.append(String.format(Locale.US,"   •   SL %.8f",sl));
+                b.append(String.format(Locale.US,"
+Hedge peak %+.2f   •   Protected ~%+.2f USDT",
+                        Math.max(0.0,h.peakProfitUsdt),Math.max(0.0,h.protectedProfitUsdt)));
+            } else if (t != null && p.side.equals(t.side)) {
+                double r = 0;
+                if (t.riskDistance > 0) r = "Buy".equals(t.side) ? (p.markPrice-t.entryPrice)/t.riskDistance : (t.entryPrice-p.markPrice)/t.riskDistance;
                 b.append(String.format(Locale.US, "   •   %+.2fR", r));
                 double sl = p.stopLoss > 0 ? p.stopLoss : t.currentStop;
                 b.append(String.format(Locale.US, "   •   SL %.8f", sl));
-                b.append(String.format(Locale.US, "\nPeak %+.2f   •   Protected ~%+.2f USDT",
+                b.append(String.format(Locale.US, "
+Peak %+.2f   •   Protected ~%+.2f USDT",
                         Math.max(0.0, t.peakProfitUsdt), Math.max(0.0, t.protectedProfitUsdt)));
             } else if (p.stopLoss > 0) {
                 b.append(String.format(Locale.US, "   •   SL %.8f", p.stopLoss));

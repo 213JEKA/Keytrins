@@ -175,19 +175,26 @@ public final class BybitClient implements AutoCloseable {
             Position p = new Position(x.optString("symbol"), x.optString("side"), size,
                     d(x,"avgPrice"), d(x,"markPrice"), d(x,"stopLoss"), d(x,"unrealisedPnl"),
                     x.optInt("positionIdx",0));
-            out.put(p.symbol,p);
+            out.put(positionKey(p.symbol,p.positionIdx),p);
         }
         return out;
     }
 
-    public Position position(String symbol) throws Exception {
+    public static String positionKey(String symbol, int positionIdx) {
+        return positionIdx == 0 ? symbol : symbol + "#" + positionIdx;
+    }
+
+    public Position position(String symbol) throws Exception { return position(symbol, -1); }
+
+    public Position position(String symbol, int positionIdx) throws Exception {
         LinkedHashMap<String,String> q = new LinkedHashMap<>(); q.put("category","linear"); q.put("symbol",symbol);
         JSONObject r = privateGet("/v5/position/list", q);
         JSONArray list = result(r).getJSONArray("list");
         for (int i=0;i<list.length();i++) {
             JSONObject x = list.getJSONObject(i); double size=d(x,"size"); if(size<=0) continue;
+            int idx=x.optInt("positionIdx",0); if(positionIdx>=0 && idx!=positionIdx) continue;
             return new Position(symbol,x.optString("side"),size,d(x,"avgPrice"),d(x,"markPrice"),
-                    d(x,"stopLoss"),d(x,"unrealisedPnl"),x.optInt("positionIdx",0));
+                    d(x,"stopLoss"),d(x,"unrealisedPnl"),idx);
         }
         return null;
     }
@@ -226,47 +233,71 @@ public final class BybitClient implements AutoCloseable {
         }
     }
 
+    public void switchToHedgeMode(String symbol) throws Exception {
+        LinkedHashMap<String,Object> b = new LinkedHashMap<>();
+        b.put("category","linear"); b.put("symbol",symbol); b.put("mode",3);
+        try { privatePost("/v5/position/switch-mode", b); }
+        catch (ApiException e) {
+            String m=e.getMessage()==null?"":e.getMessage().toLowerCase(Locale.US);
+            if (e.code != 110025 && !m.contains("not modified")) throw e;
+        }
+    }
+
     public String placeEntry(String tradeId, String symbol, String side, String qty, String stopLoss) throws Exception {
+        return placeEntry(tradeId,symbol,side,qty,stopLoss,0);
+    }
+
+    public String placeEntry(String tradeId, String symbol, String side, String qty, String stopLoss, int positionIdx) throws Exception {
         setLeverage(symbol, s.leverage);
         LinkedHashMap<String,Object> b = new LinkedHashMap<>();
         b.put("category","linear"); b.put("symbol",symbol); b.put("side",side); b.put("orderType","Market");
-        b.put("qty",qty); b.put("positionIdx",0); b.put("reduceOnly",false); b.put("orderLinkId",shortId(tradeId));
+        b.put("qty",qty); b.put("positionIdx",positionIdx); b.put("reduceOnly",false); b.put("orderLinkId",shortId(tradeId));
         b.put("stopLoss",stopLoss); b.put("slTriggerBy","MarkPrice"); b.put("tpslMode","Full"); b.put("slOrderType","Market");
         JSONObject r = privatePost("/v5/order/create", b);
         return result(r).optString("orderId", "");
     }
 
     public String reducePosition(String tradeId, String symbol, String side, String qty) throws Exception {
+        return reducePosition(tradeId,symbol,side,qty,0);
+    }
+
+    public String reducePosition(String tradeId, String symbol, String side, String qty, int positionIdx) throws Exception {
         LinkedHashMap<String,Object> b = new LinkedHashMap<>();
         b.put("category","linear"); b.put("symbol",symbol); b.put("side",side); b.put("orderType","Market");
-        b.put("qty",qty); b.put("positionIdx",0); b.put("reduceOnly",true); b.put("orderLinkId",shortId(tradeId+"_RED"));
+        b.put("qty",qty); b.put("positionIdx",positionIdx); b.put("reduceOnly",true); b.put("orderLinkId",shortId(tradeId+"_RED"));
         JSONObject r = privatePost("/v5/order/create", b);
         return result(r).optString("orderId", "");
     }
 
-    public void setStop(String symbol, String stopLoss) throws Exception {
+    public void setStop(String symbol, String stopLoss) throws Exception { setStop(symbol,stopLoss,0); }
+
+    public void setStop(String symbol, String stopLoss, int positionIdx) throws Exception {
         LinkedHashMap<String,Object> b = new LinkedHashMap<>();
-        b.put("category","linear"); b.put("symbol",symbol); b.put("tpslMode","Full"); b.put("positionIdx",0);
+        b.put("category","linear"); b.put("symbol",symbol); b.put("tpslMode","Full"); b.put("positionIdx",positionIdx);
         b.put("stopLoss",stopLoss); b.put("slTriggerBy","MarkPrice");
         privatePost("/v5/position/trading-stop", b);
     }
 
-    public Position waitPosition(String symbol, long timeoutMs) throws Exception {
+    public Position waitPosition(String symbol, long timeoutMs) throws Exception { return waitPosition(symbol,-1,timeoutMs); }
+
+    public Position waitPosition(String symbol, int positionIdx, long timeoutMs) throws Exception {
         long end = System.currentTimeMillis()+timeoutMs;
         while(System.currentTimeMillis()<end) {
-            Position p=position(symbol); if(p!=null && p.size>0) return p;
+            Position p=position(symbol,positionIdx); if(p!=null && p.size>0) return p;
             Thread.sleep(350);
         }
-        throw new IllegalStateException("Позиция не появилась после подтверждения ордера: "+symbol);
+        throw new IllegalStateException("Позиция не появилась после подтверждения ордера: "+symbol+" idx="+positionIdx);
     }
 
-    public Position waitReduced(String symbol, double before, long timeoutMs) throws Exception {
+    public Position waitReduced(String symbol, double before, long timeoutMs) throws Exception { return waitReduced(symbol,-1,before,timeoutMs); }
+
+    public Position waitReduced(String symbol, int positionIdx, double before, long timeoutMs) throws Exception {
         long end=System.currentTimeMillis()+timeoutMs;
         while(System.currentTimeMillis()<end) {
-            Position p=position(symbol); if(p==null || p.size < before) return p;
+            Position p=position(symbol,positionIdx); if(p==null || p.size < before) return p;
             Thread.sleep(250);
         }
-        throw new IllegalStateException("Сокращение позиции не подтверждено: "+symbol);
+        throw new IllegalStateException("Сокращение позиции не подтверждено: "+symbol+" idx="+positionIdx);
     }
 
     private JSONObject publicGet(String path, LinkedHashMap<String,String> params) throws Exception {

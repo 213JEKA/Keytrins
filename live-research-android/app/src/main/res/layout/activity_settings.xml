@@ -96,7 +96,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Crypto-only • H1 EMA50/200 + ADX≥22 • M15 pullback + confirmation\n-0.20R + слом → закрыть 85% • -0.35R → закрыть весь остаток\nDollar lock: каждые +0.50 USDT по максимуму → защита +0.50 USDT с отставанием 0.50\n+0.50 → BE+расходы • +1.00 → lock ~+0.50 • +1.50 → ~+1.00\nВысокий R: ATR/R-floor остаётся дополнительной защитой • TP нет"
+                android:text="Crypto-only • H1 EMA50/200 + ADX≥22 • M15 pullback + confirmation\nPrimary: -0.20R + слом → закрыть 85% • -0.35R → закрыть остаток\nHEDGE: при -0.15 ATR открыть 100% встречной позиции • аварийный SL 0.20 ATR\nЕсли primary снова выходит в расчётный net + → hedge закрыть reduce-only\nЕсли adverse движение продолжается после partial/full primary → hedge остаётся и ведётся $0.50/$0.50 • TP нет"
                 android:textColor="@color/muted"
                 android:textSize="13sp" />
         </LinearLayout>
