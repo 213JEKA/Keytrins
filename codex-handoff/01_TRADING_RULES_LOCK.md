@@ -79,15 +79,37 @@ Fresh window about 20 minutes.
 - `r <= -0.35R` => reduce-only close **100% of all remaining size**, with or without structural break;
 - initial exchange stop remains emergency protection.
 
-## Positive-side control
-- `+1.5R` => BE adjusted for fee/spread and 2 ticks;
-- from `+2R` trailing active;
-- `>= +2R` floor `+1R`;
-- `>= +2.5R` floor `+2R` and trail `1.6 ATR`;
-- `>= +3R` floor `+2.25R`;
-- before +2.5R trail uses 2.2 ATR;
-- choose the more protective stop between ATR candidate and R-floor;
-- stop never moves backward;
+## Primary positive-side control: $0.50 step lock
+Android v0.1.3.4 changes the primary profit protection from a late R-only BE to a dollar-step lock based on the maximum favorable mark reached while the remaining position is open.
+
+Definitions:
+- `peakGrossUsd = max favorable price move from entry * current remaining quantity`;
+- `step = 0.50 USDT`;
+- `lag = 0.50 USDT`;
+- `protectedUsd = max(0, floor(peakGrossUsd / 0.50) * 0.50 - 0.50)`.
+
+Behavior:
+- peak reaches about `+0.50 USDT` => exchange stop moves to BE plus estimated round-trip fee/spread/tick costs;
+- peak reaches `+1.00 USDT` => protect about `+0.50 USDT` plus costs;
+- peak reaches `+1.50 USDT` => protect about `+1.00 USDT` plus costs;
+- peak reaches `+2.00 USDT` => protect about `+1.50 USDT` plus costs;
+- continue indefinitely in `0.50 USDT` steps with constant `0.50 USDT` lag;
+- stop is quantized to exchange tick size;
+- stop may never move backward;
+- if a desired stop would already be beyond the current mark, do not place an invalid stop.
+
+The current Android implementation estimates per-unit costs as:
+`entryPrice * (2 * takerFee) + spreadAtEntry + 2*tickSize`
+and adds that cost allowance to the protected dollar floor when converting protected USDT to stop price.
+
+## Additional high-R protection
+The previous high-R ATR/R-floor layer remains as an additional protection layer only. Whichever rule yields the more protective valid stop wins because the stop never loosens.
+
+- from `+2R` ATR/R-floor trailing may activate;
+- `>= +2R` R-floor `+1R`;
+- `>= +2.5R` R-floor `+2R` and trail `1.6 ATR`;
+- `>= +3R` R-floor `+2.25R`;
+- before +2.5R ATR trail uses 2.2 ATR;
 - no fixed TP.
 
-Do not alter any of these numbers in server-v1 without a separate explicit strategy change.
+Do not alter these rules in server-v1 without a separate explicit strategy change.
