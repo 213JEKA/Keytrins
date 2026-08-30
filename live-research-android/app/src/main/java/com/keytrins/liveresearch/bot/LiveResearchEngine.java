@@ -151,8 +151,9 @@ public final class LiveResearchEngine implements AutoCloseable {
         for (String x : trades.keySet()) if (!symbols.contains(x)) symbols.add(x);
         int signalCount=0;
         for (String symbol : symbols) {
-            Instrument inst=instruments.get(symbol); if(inst==null) continue;
+            Instrument inst=instruments.get(symbol);
             try {
+                if(inst==null) continue;
                 List<Candle> h1=api.getKlines(symbol,"60",260);
                 List<Candle> m15=api.getKlines(symbol,"15",160);
                 TradeState tr=trades.get(symbol);
@@ -167,14 +168,16 @@ public final class LiveResearchEngine implements AutoCloseable {
                 if(sr.signal==null) continue;
                 signalCount++; BotRuntime.signals++;
                 evaluateEntry(sr.signal, tickers.get(symbol));
-            } catch(Exception e){ db.event("ERROR","SCAN",e.toString(),symbol,null); }
-
-            // Keep protection responsive while the M15 universe scan is walking symbols.
-            // This stays single-threaded: no concurrent trading calls are introduced.
-            long now=System.currentTimeMillis();
-            if(now-lastManage>=MANAGE_INTERVAL_MS){
-                managePositions();
-                lastManage=System.currentTimeMillis();
+            } catch(Exception e){
+                db.event("ERROR","SCAN",e.toString(),symbol,null);
+            } finally {
+                // continue/return paths inside symbol analysis still execute this protection pass.
+                // No concurrent Bybit calls are introduced: scan and protection remain serialized.
+                long now=System.currentTimeMillis();
+                if(now-lastManage>=MANAGE_INTERVAL_MS){
+                    managePositions();
+                    lastManage=System.currentTimeMillis();
+                }
             }
             try { Thread.sleep(60); } catch(InterruptedException e){ Thread.currentThread().interrupt(); return; }
         }
