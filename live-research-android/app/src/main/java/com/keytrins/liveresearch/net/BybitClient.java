@@ -20,7 +20,6 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -315,7 +314,7 @@ public final class BybitClient implements AutoCloseable {
     private void requireKey(){if(s.apiKey==null||s.apiKey.isEmpty()||s.apiSecret==null||s.apiSecret.isEmpty())throw new IllegalStateException("API key/secret не заданы");}
     private static String read(InputStream in)throws Exception{if(in==null)return"";try(BufferedReader b=new BufferedReader(new InputStreamReader(in,StandardCharsets.UTF_8))){StringBuilder s=new StringBuilder();String x;while((x=b.readLine())!=null)s.append(x);return s.toString();}}
     private static String query(LinkedHashMap<String,String> p)throws Exception{StringBuilder b=new StringBuilder();for(Map.Entry<String,String>e:p.entrySet()){if(b.length()>0)b.append('&');b.append(URLEncoder.encode(e.getKey(),"UTF-8")).append('=').append(URLEncoder.encode(e.getValue(),"UTF-8"));}return b.toString();}
-    private static String json(LinkedHashMap<String,Object>b){JSONObject o=new JSONObject();for(Map.Entry<String,Object>e:b.entrySet())o.put(e.getKey(),e.getValue());return o.toString();}
+    private static String json(LinkedHashMap<String,Object>b) throws Exception {JSONObject o=new JSONObject();for(Map.Entry<String,Object>e:b.entrySet())o.put(e.getKey(),e.getValue());return o.toString();}
     private static String hmac(String value,String secret)throws Exception{Mac m=Mac.getInstance("HmacSHA256");m.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8),"HmacSHA256"));byte[]x=m.doFinal(value.getBytes(StandardCharsets.UTF_8));StringBuilder b=new StringBuilder();for(byte z:x)b.append(String.format(Locale.US,"%02x",z&255));return b.toString();}
     private static double d(JSONObject x,String k){String v=x.optString(k,"");if(v==null||v.isEmpty())return 0;try{return Double.parseDouble(v);}catch(Exception e){return x.optDouble(k,0);}}
     private static BigDecimal bd(String x){try{return new BigDecimal(x);}catch(Exception e){return BigDecimal.ZERO;}}
