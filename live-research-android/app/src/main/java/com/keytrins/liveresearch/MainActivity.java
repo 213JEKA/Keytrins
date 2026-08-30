@@ -65,7 +65,7 @@ public class MainActivity extends android.app.Activity {
 
         historyText.setText(stripBalanceLines(dashboardDb.recentClosedTradesText(3)));
         requestNotificationPermission();
-        BotRuntime.log("Live Research v0.1.3.3 готов.");
+        BotRuntime.log("Live Research v0.1.3.5 готов.");
         refreshUiLoop();
     }
 
@@ -229,6 +229,8 @@ public class MainActivity extends android.app.Activity {
                 b.append(String.format(Locale.US, "   •   %+.2fR", r));
                 double sl = p.stopLoss > 0 ? p.stopLoss : t.currentStop;
                 b.append(String.format(Locale.US, "   •   SL %.8f", sl));
+                b.append(String.format(Locale.US, "\nPeak %+.2f   •   Protected ~%+.2f USDT",
+                        Math.max(0.0, t.peakProfitUsdt), Math.max(0.0, t.protectedProfitUsdt)));
             } else if (p.stopLoss > 0) {
                 b.append(String.format(Locale.US, "   •   SL %.8f", p.stopLoss));
             }
