@@ -79,6 +79,20 @@ public final class SettingsStore {
         saveStrategy(risk, universe);
     }
 
+    public double baselineBalance() {
+        long bits = p.getLong("baselineBalanceBits", Long.MIN_VALUE);
+        return bits == Long.MIN_VALUE ? Double.NaN : Double.longBitsToDouble(bits);
+    }
+
+    public void seedBaselineIfAbsent(double balance) {
+        if (!(balance > 0) || p.contains("baselineBalanceBits")) return;
+        p.edit().putLong("baselineBalanceBits", Double.doubleToRawLongBits(balance)).apply();
+    }
+
+    public void clearBaseline() {
+        p.edit().remove("baselineBalanceBits").apply();
+    }
+
     private double d(String k, double def) {
         try { return Double.parseDouble(p.getString(k, Double.toString(def))); }
         catch (Exception e) { return def; }
