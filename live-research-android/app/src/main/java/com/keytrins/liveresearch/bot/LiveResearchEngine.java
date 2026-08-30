@@ -36,6 +36,8 @@ public final class LiveResearchEngine implements AutoCloseable {
             "USDT","USDC","USDE","FDUSD","TUSD","DAI","USDD","PYUSD","USD1","USDP"));
     private static final double DOLLAR_LOCK_STEP_USDT = 0.50;
     private static final double DOLLAR_LOCK_LAG_USDT = 0.50;
+    private static final long MANAGE_INTERVAL_MS = 1_000L;
+    private static final long BALANCE_REFRESH_MS = 5_000L;
 
     private final SettingsStore.Snapshot s;
     private final BybitClient api;
@@ -45,7 +47,7 @@ public final class LiveResearchEngine implements AutoCloseable {
     private Map<String,Ticker> tickers = new HashMap<>();
     private final Map<String,TradeState> trades;
     private List<String> universe = new ArrayList<>();
-    private long lastUniverseRefresh = 0, lastScanClose = -1, lastManage = 0;
+    private long lastUniverseRefresh = 0, lastScanClose = -1, lastManage = 0, lastBalanceRefresh = 0;
 
     public LiveResearchEngine(Context context, SettingsStore.Snapshot s) {
         this.s = s;
@@ -77,7 +79,7 @@ public final class LiveResearchEngine implements AutoCloseable {
     public void run(BooleanSupplier keepRunning, Consumer<String> notify) throws Exception {
         refreshUniverse(true);
         if (!s.apiKey.isEmpty() && !s.apiSecret.isEmpty()) {
-            try { BotRuntime.balance = api.walletBalanceUsdt(); } catch (Exception e) { log("Баланс недоступен: "+err(e)); }
+            try { BotRuntime.balance = api.walletBalanceUsdt(); lastBalanceRefresh = System.currentTimeMillis(); } catch (Exception e) { log("Баланс недоступен: "+err(e)); }
         }
         BotRuntime.status = s.live ? "LIVE • работает" : "OBSERVE • работает";
         notify.accept(BotRuntime.status);
@@ -87,9 +89,9 @@ public final class LiveResearchEngine implements AutoCloseable {
             long now = System.currentTimeMillis();
             try {
                 if (now - lastUniverseRefresh >= 60 * 60_000L) refreshUniverse(false);
-                if (now - lastManage >= 5_000L) {
+                if (now - lastManage >= MANAGE_INTERVAL_MS) {
                     managePositions();
-                    lastManage = now;
+                    lastManage = System.currentTimeMillis();
                 }
                 long close = (now / (15 * 60_000L)) * (15 * 60_000L);
                 if (now - close >= 8_000L && close != lastScanClose) {
@@ -101,7 +103,7 @@ public final class LiveResearchEngine implements AutoCloseable {
             } catch (Exception e) {
                 log("LOOP ERROR: "+err(e));
             }
-            Thread.sleep(1000L);
+            Thread.sleep(200L);
         }
     }
 
@@ -166,6 +168,14 @@ public final class LiveResearchEngine implements AutoCloseable {
                 signalCount++; BotRuntime.signals++;
                 evaluateEntry(sr.signal, tickers.get(symbol));
             } catch(Exception e){ db.event("ERROR","SCAN",e.toString(),symbol,null); }
+
+            // Keep protection responsive while the M15 universe scan is walking symbols.
+            // This stays single-threaded: no concurrent trading calls are introduced.
+            long now=System.currentTimeMillis();
+            if(now-lastManage>=MANAGE_INTERVAL_MS){
+                managePositions();
+                lastManage=System.currentTimeMillis();
+            }
             try { Thread.sleep(60); } catch(InterruptedException e){ Thread.currentThread().interrupt(); return; }
         }
         log("Скан завершён: сигналов "+signalCount+" / "+universe.size());
@@ -204,6 +214,7 @@ public final class LiveResearchEngine implements AutoCloseable {
         tr.entryPrice=actualEntry; tr.initialQty=actualQty; tr.currentQty=actualQty; tr.initialStop=stopQ.doubleValue(); tr.currentStop=stopQ.doubleValue();
         tr.riskDistance=Math.abs(actualEntry-tr.initialStop); tr.targetRiskUsdt=s.riskUsdt; tr.atr=sig.m15Atr; tr.takerFee=taker;
         tr.spreadAtEntry=spread; tr.costREst=costR; tr.state="OPEN"; tr.highWater=actualEntry; tr.lowWater=actualEntry;
+        tr.peakProfitUsdt=0; tr.protectedProfitUsdt=0;
         trades.put(symbol,tr); db.upsertTrade(tr); db.logSignal(symbol,"ENTRY","FILLED",sig,actualQty,costR);
         BotRuntime.entries++; log("LIVE ENTRY "+symbol+" "+side+" qty="+actualQty+" @ "+actualEntry+" SL="+tr.initialStop);
     }
@@ -213,7 +224,10 @@ public final class LiveResearchEngine implements AutoCloseable {
         try {
             Map<String,Position> positions=api.openPositions(); tickers=api.getAllTickers();
             BotRuntime.openPositions=positions.size();
-            try { BotRuntime.balance=api.walletBalanceUsdt(); } catch(Exception ignored){}
+            long now=System.currentTimeMillis();
+            if(now-lastBalanceRefresh>=BALANCE_REFRESH_MS){
+                try { BotRuntime.balance=api.walletBalanceUsdt(); lastBalanceRefresh=now; } catch(Exception ignored){}
+            }
             for(String symbol:new ArrayList<>(trades.keySet())){
                 TradeState tr=trades.get(symbol); Position p=positions.get(symbol); Instrument inst=instruments.get(symbol);
                 if(p==null){
@@ -221,12 +235,36 @@ public final class LiveResearchEngine implements AutoCloseable {
                     double[] tx = new double[]{0,0,0,0};
                     try { Thread.sleep(350); tx = api.transactionSummary(symbol, tr.openedAtMs, closedAt); } catch (Exception ignored) {}
                     db.closeTrade(tr, closedAt, tx[0], tx[1], tx[2], tx[3]);
-                    log(String.format(Locale.US, "CLOSED %s net=%+.3f USDT (%+.3fR) fees=%.3f funding=%+.3f", symbol, tx[3], tr.targetRiskUsdt>0?tx[3]/tr.targetRiskUsdt:0, tx[1], tx[2]));
+                    log(String.format(Locale.US, "CLOSED %s net=%+.3f USDT (%+.3fR) fees=%.3f funding=%+.3f peak=%+.2f protected~%+.2f",
+                            symbol, tx[3], tr.targetRiskUsdt>0?tx[3]/tr.targetRiskUsdt:0, tx[1], tx[2], tr.peakProfitUsdt, tr.protectedProfitUsdt));
                     db.event("INFO","CLOSED","position absent",symbol,tr.tradeId); db.deleteTrade(symbol); trades.remove(symbol); continue;
                 }
                 if(p.positionIdx!=0){log("WARNING "+symbol+": Hedge mode, управление остановлено");continue;}
-                tr.currentQty=p.size; Ticker tk=tickers.get(symbol); double mark=tk==null?p.markPrice:positive(tk.mark,tk.last,p.markPrice); if(mark<=0)continue;
+                tr.currentQty=p.size;
+                Ticker tk=tickers.get(symbol); double mark=tk==null?p.markPrice:positive(tk.mark,tk.last,p.markPrice); if(mark<=0)continue;
                 tr.highWater=Math.max(tr.highWater,mark); tr.lowWater=Math.min(tr.lowWater,mark);
+
+                double markGross="Buy".equals(tr.side)?(mark-tr.entryPrice)*tr.currentQty:(tr.entryPrice-mark)*tr.currentQty;
+                double observedGross=p.unrealisedPnl;
+                if(Double.isNaN(observedGross)||Double.isInfinite(observedGross))observedGross=markGross;
+                if(markGross>observedGross)observedGross=markGross;
+                if(observedGross>tr.peakProfitUsdt)tr.peakProfitUsdt=observedGross;
+
+                // Migration safety for a position that was already open before v0.1.3.5:
+                // persisted price high/low-water is used once as a lower bound for the peak.
+                double legacyPeak="Buy".equals(tr.side)
+                        ? Math.max(0.0,tr.highWater-tr.entryPrice)*tr.currentQty
+                        : Math.max(0.0,tr.entryPrice-tr.lowWater)*tr.currentQty;
+                if(legacyPeak>tr.peakProfitUsdt)tr.peakProfitUsdt=legacyPeak;
+
+                if(inst!=null&&p.stopLoss>0&&stopIsMoreProtective(tr,p.stopLoss)){
+                    tr.currentStop=p.stopLoss;
+                }
+                if(inst!=null&&tr.currentStop>0){
+                    double existingProtection=estimatedProtectedProfitAtStop(tr,inst,tr.currentStop);
+                    if(existingProtection>tr.protectedProfitUsdt)tr.protectedProfitUsdt=existingProtection;
+                }
+
                 double r=priceR(tr,mark);
                 boolean riskExit=maybeReduce(tr,inst,r);
                 if(!riskExit)maybeBeTrail(tr,inst,r,mark);
@@ -275,14 +313,11 @@ public final class LiveResearchEngine implements AutoCloseable {
     private void maybeBeTrail(TradeState tr,Instrument inst,double r,double mark)throws Exception{
         if(inst==null||tr.currentQty<=0)return;
 
-        // Primary profit protection is now dollar-based: every +$0.50 of peak open PnL
-        // advances the protected result by another $0.50, with a constant $0.50 lag.
-        // At +$0.50 peak this becomes BE+costs; +$1.00 protects about +$0.50;
-        // +$1.50 protects about +$1.00; etc. Stop is exchange-side and never loosens.
+        // Primary profit protection: a persisted observed PnL peak advances in $0.50 steps.
+        // +$0.50 => BE+costs, +$1.00 => protect about +$0.50, +$1.50 => about +$1.00, etc.
+        // peakProfitUsdt is monotonic and survives process/app restart through SQLite.
         double qty=tr.currentQty;
-        double peakGrossUsd="Buy".equals(tr.side)
-                ? Math.max(0.0,tr.highWater-tr.entryPrice)*qty
-                : Math.max(0.0,tr.entryPrice-tr.lowWater)*qty;
+        double peakGrossUsd=Math.max(0.0,tr.peakProfitUsdt);
         double steps=Math.floor((peakGrossUsd+1e-9)/DOLLAR_LOCK_STEP_USDT);
         if(steps>=1.0){
             double protectedUsd=Math.max(0.0,steps*DOLLAR_LOCK_STEP_USDT-DOLLAR_LOCK_LAG_USDT);
@@ -295,15 +330,16 @@ public final class LiveResearchEngine implements AutoCloseable {
                 tr.currentStop=q.doubleValue();
                 tr.beArmed=true;
                 tr.state=protectedUsd>0?"DOLLAR_LOCK":"BE";
+                double actualProtected=estimatedProtectedProfitAtStop(tr,inst,tr.currentStop);
+                if(actualProtected>tr.protectedProfitUsdt)tr.protectedProfitUsdt=actualProtected;
                 log(String.format(Locale.US,
-                        "DOLLAR LOCK %s peak=$%.3f protect=$%.2f stop=%s",
-                        tr.symbol,peakGrossUsd,protectedUsd,Decimals.fmt(q)));
+                        "DOLLAR LOCK %s peak=$%.3f target=$%.2f protected~$%.3f stop=%s",
+                        tr.symbol,peakGrossUsd,protectedUsd,tr.protectedProfitUsdt,Decimals.fmt(q)));
             }
         }
 
-        // Keep the existing high-R ATR/R-floor logic only as an additional protection layer.
-        // Whichever rule produces the more protective valid stop wins because stopImproves()
-        // never allows the exchange stop to move backward.
+        // Existing high-R ATR/R-floor logic remains only as an additional protection layer.
+        // stopImproves() prevents either layer from loosening the exchange stop.
         if(r>=s.trailTriggerR){tr.trailing=true;tr.state="TRAILING";}
         if(!tr.trailing)return;
 
@@ -323,8 +359,13 @@ public final class LiveResearchEngine implements AutoCloseable {
         }
 
         if(stopImproves(tr,inst,candidate,mark)){
-            BigDecimal q=stopPrice(inst,tr.side,candidate);api.setStop(tr.symbol,Decimals.fmt(q));tr.currentStop=q.doubleValue();
-            log(String.format(Locale.US,"PROFIT LOCK %s %.3fR floor=%.2fR trail=%.1fATR stop=%s",tr.symbol,r,floorR,trailMult,Decimals.fmt(q)));
+            BigDecimal q=stopPrice(inst,tr.side,candidate);
+            api.setStop(tr.symbol,Decimals.fmt(q));
+            tr.currentStop=q.doubleValue();
+            double actualProtected=estimatedProtectedProfitAtStop(tr,inst,tr.currentStop);
+            if(actualProtected>tr.protectedProfitUsdt)tr.protectedProfitUsdt=actualProtected;
+            log(String.format(Locale.US,"PROFIT LOCK %s %.3fR floor=%.2fR trail=%.1fATR protected~$%.3f stop=%s",
+                    tr.symbol,r,floorR,trailMult,tr.protectedProfitUsdt,Decimals.fmt(q)));
         }
     }
 
@@ -332,6 +373,19 @@ public final class LiveResearchEngine implements AutoCloseable {
         double min=inst.tickSize.doubleValue()*2;
         if("Buy".equals(tr.side))return candidate>tr.currentStop+min&&candidate<mark-inst.tickSize.doubleValue();
         return candidate<tr.currentStop-min&&candidate>mark+inst.tickSize.doubleValue();
+    }
+
+    private boolean stopIsMoreProtective(TradeState tr,double exchangeStop){
+        if(exchangeStop<=0)return false;
+        if(tr.currentStop<=0)return true;
+        return "Buy".equals(tr.side)?exchangeStop>tr.currentStop:exchangeStop<tr.currentStop;
+    }
+
+    private double estimatedProtectedProfitAtStop(TradeState tr,Instrument inst,double stop){
+        if(inst==null||tr.currentQty<=0||stop<=0)return 0;
+        double gross="Buy".equals(tr.side)?(stop-tr.entryPrice)*tr.currentQty:(tr.entryPrice-stop)*tr.currentQty;
+        double costPerUnit=tr.entryPrice*(2*tr.takerFee)+tr.spreadAtEntry+2*inst.tickSize.doubleValue();
+        return Math.max(0.0,gross-costPerUnit*tr.currentQty);
     }
 
     private double priceR(TradeState tr,double price){if(tr.riskDistance<=0)return 0;return "Buy".equals(tr.side)?(price-tr.entryPrice)/tr.riskDistance:(tr.entryPrice-price)/tr.riskDistance;}
