@@ -1,0 +1,33 @@
+You are taking over the Live Research trading project for a server migration.
+
+Repository: 213JEKA/Keytrins
+Branch: live-research-android-v01
+Trading baseline source commit: 65149f73a3b0ca11b871e0cbaddcdd39dbbd3a88
+
+Read `codex-handoff/00_START_HERE.md` and all sibling handoff files first, then inspect the Android source.
+
+Task: migrate the currently working Android Bybit trading runtime to a continuously running server while preserving current strategy behavior.
+
+Hard rule: PARITY FIRST. Do not optimize or alter the H1/M15 entry analysis in server-v1.
+
+Requirements:
+- server becomes sole Bybit trading runtime;
+- Android becomes control/monitor UI;
+- preserve current universe, entry, stop, sizing and cost/R rules;
+- preserve risk logic: -0.20R + fresh M15 structural break => reduce 85%; -0.35R => close 100% remaining; no re-add; +1.5R BE; +2R/+2.5R/+3R profit-lock ladder and ATR trailing;
+- PostgreSQL canonical state;
+- idempotent orders and reconciliation;
+- restart/crash recovery;
+- Docker deployment;
+- parity tests against current Android semantics;
+- fault injection around order submission and position management;
+- completed trade cycles must aggregate partial exits correctly.
+
+Before production code:
+1. inspect Android source;
+2. write migration plan;
+3. identify ambiguities;
+4. create tests that freeze current semantics;
+5. only then implement server-v1.
+
+Never ask for Bybit API secrets in chat and never commit secrets to the repository.
