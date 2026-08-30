@@ -47,7 +47,7 @@ jobs:
         run: |
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 \
             live-research-android/app/build/outputs/apk/release/app-release-unsigned.apk \
-            live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.3-aligned-unsigned.apk
+            live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.3.2-aligned-unsigned.apk
 
       - name: Prepare signing tools artifact
         run: |
@@ -74,23 +74,23 @@ jobs:
             --ks-key-alias "$KEY_ALIAS" \
             --ks-pass env:KS_PASS \
             --key-pass env:KEY_PASS \
-            --out live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.3-signed.apk \
-            live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.3-aligned-unsigned.apk
+            --out live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.3.2-signed.apk \
+            live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.3.2-aligned-unsigned.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs \
-            live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.3-signed.apk
+            live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.3.2-signed.apk
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveResearchAndroid-v0.1.3-debug
+          name: LiveResearchAndroid-v0.1.3.2-debug
           path: live-research-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
       - name: Upload aligned unsigned release APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveResearchAndroid-v0.1.3-aligned-unsigned
-          path: live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.3-aligned-unsigned.apk
+          name: LiveResearchAndroid-v0.1.3.2-aligned-unsigned
+          path: live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.3.2-aligned-unsigned.apk
           if-no-files-found: error
 
       - name: Upload Android signing tools
@@ -104,6 +104,6 @@ jobs:
         if: env.HAS_SIGNING_KEY == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: LiveResearchAndroid-v0.1.3-signed
-          path: live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.3-signed.apk
+          name: LiveResearchAndroid-v0.1.3.2-signed
+          path: live-research-android/app/build/outputs/apk/release/LiveResearchAndroid-v0.1.3.2-signed.apk
           if-no-files-found: error
