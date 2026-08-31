@@ -1,0 +1,32 @@
+name: Bootstrap OKX Inverse Android once
+
+on:
+  push:
+    branches:
+      - live-research-android-v01
+    paths:
+      - '.github/workflows/bootstrap-okx-inverse-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Copy Android source tree
+        run: |
+          rm -rf okx-inverse-android
+          cp -a live-research-android okx-inverse-android
+          rm -f okx-inverse-android/BUILD_v0.1.3.6.txt
+      - name: Commit OKX project
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add okx-inverse-android
+          git diff --cached --check
+          git commit -m "Bootstrap reproducible OKX Inverse Android source"
+          git push origin HEAD:live-research-android-v01
