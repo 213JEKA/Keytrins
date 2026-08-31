@@ -14,7 +14,7 @@ public final class SettingsStore {
     }
 
     public static final class Snapshot {
-        public String apiKey, apiSecret;
+        public String apiKey, apiSecret, apiPassphrase;
         public boolean testnet, live;
         public double riskUsdt, minTurnoverUsdt, maxNotionalUsdt, maxCostR, defaultTakerFee;
         public int universeSize, leverage, minAgeDays;
@@ -26,6 +26,7 @@ public final class SettingsStore {
         Snapshot s = new Snapshot();
         s.apiKey = vault.get("apiKey");
         s.apiSecret = vault.get("apiSecret");
+        s.apiPassphrase = vault.get("apiPassphrase");
         s.testnet = p.getBoolean("testnet", false);
         s.live = p.getBoolean("live", false);
         s.riskUsdt = d("riskUsdt", 3.0);
@@ -35,7 +36,7 @@ public final class SettingsStore {
         s.leverage = i("leverage", 5);
         s.maxNotionalUsdt = d("maxNotionalUsdt", 1000.0);
         s.maxCostR = d("maxCostR", 0.25);
-        s.defaultTakerFee = d("defaultTakerFee", 0.00055);
+        s.defaultTakerFee = d("defaultTakerFee", 0.00050);
         s.adxMin = d("adxMin", 22.0);
         s.h1EmaFast = i("h1EmaFast", 50);
         s.h1EmaSlow = i("h1EmaSlow", 200);
@@ -55,48 +56,34 @@ public final class SettingsStore {
         return s;
     }
 
-    public void saveCredentials(String key, String secret) {
+    public void saveCredentials(String key, String secret, String passphrase) {
         vault.put("apiKey", key == null ? "" : key.trim());
         vault.put("apiSecret", secret == null ? "" : secret.trim());
+        vault.put("apiPassphrase", passphrase == null ? "" : passphrase.trim());
     }
 
-    public void saveConnection(boolean testnet) {
-        p.edit().putBoolean("testnet", testnet).apply();
-    }
-
-    public void saveLive(boolean live) {
-        p.edit().putBoolean("live", live).apply();
-    }
-
+    public void saveConnection(boolean demo) { p.edit().putBoolean("testnet", demo).apply(); }
+    public void saveLive(boolean live) { p.edit().putBoolean("live", live).apply(); }
     public void saveStrategy(double risk, int universe) {
-        p.edit().putString("riskUsdt", Double.toString(risk))
-                .putInt("universeSize", universe).apply();
+        p.edit().putString("riskUsdt", Double.toString(risk)).putInt("universeSize", universe).apply();
     }
-
-    public void saveBasic(boolean testnet, boolean live, double risk, int universe) {
-        saveConnection(testnet);
-        saveLive(live);
-        saveStrategy(risk, universe);
+    public void saveBasic(boolean demo, boolean live, double risk, int universe) {
+        saveConnection(demo); saveLive(live); saveStrategy(risk, universe);
     }
 
     public double baselineBalance() {
         long bits = p.getLong("baselineBalanceBits", Long.MIN_VALUE);
         return bits == Long.MIN_VALUE ? Double.NaN : Double.longBitsToDouble(bits);
     }
-
     public void seedBaselineIfAbsent(double balance) {
         if (!(balance > 0) || p.contains("baselineBalanceBits")) return;
         p.edit().putLong("baselineBalanceBits", Double.doubleToRawLongBits(balance)).apply();
     }
-
     public void setBaselineBalance(double balance) {
         if (!(balance > 0)) return;
         p.edit().putLong("baselineBalanceBits", Double.doubleToRawLongBits(balance)).apply();
     }
-
-    public void clearBaseline() {
-        p.edit().remove("baselineBalanceBits").apply();
-    }
+    public void clearBaseline() { p.edit().remove("baselineBalanceBits").apply(); }
 
     private double d(String k, double def) {
         try { return Double.parseDouble(p.getString(k, Double.toString(def))); }
