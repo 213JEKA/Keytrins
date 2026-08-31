@@ -87,7 +87,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Стратегия"
+                android:text="Стратегия v2 • LEVEL/REGIME FIRST"
                 android:textColor="@color/text"
                 android:textSize="18sp"
                 android:textStyle="bold" />
@@ -96,7 +96,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Crypto-only • H1 EMA50/200 + ADX≥22 • M15 pullback + confirmation\nPrimary: -0.20R + слом → закрыть 85% • -0.35R → закрыть остаток\nHEDGE: при -0.15 ENTRY ATR открыть 100% встречной позиции • fail-safe не позже -0.15R • аварийный SL 0.20 ATR\nЕсли primary снова выходит в расчётный net + → hedge закрыть reduce-only\nЕсли adverse движение продолжается после partial/full primary → hedge остаётся и ведётся $0.50/$0.50 • TP нет"
+                android:text="Сначала режим и положение цены, потом направление входа.\nТренд: LONG только из нижней зоны восходящего канала • SHORT только из верхней зоны нисходящего.\nБоковик: середина = NO TRADE • верх = SHORT только после отбоя, LONG только после пробоя + ретеста • низ зеркально.\nПеред входом требуется свободный ход до ближайшего уровня ≥1.05R. Переходный/конфликтный режим = WAIT.\nPrimary: -0.20R + слом → закрыть 85% • -0.35R → закрыть остаток.\nHEDGE: -0.15 ENTRY ATR, fail-safe -0.15R • встречка 100% • $0.50/$0.50 • TP нет."
                 android:textColor="@color/muted"
                 android:textSize="13sp" />
         </LinearLayout>
