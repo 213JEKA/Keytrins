@@ -14,10 +14,18 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="LIVE RESEARCH v0.1"
+            android:text="OKX INVERSE v0.1.0"
             android:textColor="@color/text"
             android:textSize="24sp"
             android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="LONG сигнал → SHORT • SHORT сигнал → LONG"
+            android:textColor="@color/muted"
+            android:textSize="14sp" />
 
         <TextView
             android:id="@+id/statusText"
@@ -36,7 +44,7 @@
             android:orientation="vertical">
 
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="Bybit V5 API" android:textColor="@color/text" android:textStyle="bold" android:textSize="18sp"/>
+                android:text="OKX V5 API" android:textColor="@color/text" android:textStyle="bold" android:textSize="18sp"/>
 
             <EditText
                 android:id="@+id/apiKey"
@@ -58,11 +66,21 @@
                 android:textColor="@color/text"
                 android:textColorHint="@color/muted" />
 
+            <EditText
+                android:id="@+id/apiPassphrase"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="API passphrase"
+                android:inputType="textPassword"
+                android:singleLine="true"
+                android:textColor="@color/text"
+                android:textColorHint="@color/muted" />
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="Ключ: Read + Derivatives Trade. Разрешение Withdraw не давать. Secret хранится локально в Android Keystore."
+                android:text="Ключ OKX: Read + Trade. Withdraw не разрешать. Key/Secret/Passphrase хранятся локально через Android Keystore. Для торговли нужен One-Way / net_mode."
                 android:textColor="@color/muted"
                 android:textSize="12sp" />
 
@@ -70,7 +88,7 @@
                 android:id="@+id/testnetSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Testnet"
+                android:text="Demo / simulated trading"
                 android:textColor="@color/text" />
 
             <Switch
@@ -99,7 +117,7 @@
             </LinearLayout>
 
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="H1: EMA50/200 + ADX≥22 • M15: pullback EMA20–50 + confirmation • −0.35R + слом → −75% • −0.55R → −75% • +1.5R → BE • +2R → trailing 2.2 ATR • TP нет"
+                android:text="Сигналы ранней версии Bybit без изменений • исполнение инвертировано • исходный SL зеркалится под фактическую позицию • +1.5R → безубыток + комиссии/спред/2 тика • дальше стоп не подтягивается • TP нет • сокращений и hedge нет"
                 android:textColor="@color/muted" android:textSize="13sp" />
         </LinearLayout>
 
