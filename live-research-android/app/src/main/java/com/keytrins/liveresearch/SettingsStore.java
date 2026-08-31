@@ -14,7 +14,7 @@ public final class SettingsStore {
     }
 
     public static final class Snapshot {
-        public String apiKey, apiSecret;
+        public String apiKey, apiSecret, apiPassphrase;
         public boolean testnet, live;
         public double riskUsdt, minTurnoverUsdt, maxNotionalUsdt, maxCostR, defaultTakerFee;
         public int universeSize, leverage;
@@ -26,6 +26,7 @@ public final class SettingsStore {
         Snapshot s = new Snapshot();
         s.apiKey = vault.get("apiKey");
         s.apiSecret = vault.get("apiSecret");
+        s.apiPassphrase = vault.get("apiPassphrase");
         s.testnet = p.getBoolean("testnet", false);
         s.live = p.getBoolean("live", false);
         s.riskUsdt = d("riskUsdt", 3.0);
@@ -45,18 +46,20 @@ public final class SettingsStore {
         s.atrPeriod = i("atrPeriod", 14);
         s.atrSlMult = d("atrSlMult", 1.2);
         s.swingLookback = i("swingLookback", 5);
-        s.reduceTriggerR = d("reduceTriggerR", -0.35);
-        s.forceReduceR = d("forceReduceR", -0.55);
-        s.reduceFraction = d("reduceFraction", 0.75);
+        // Legacy fields remain for StrategyEngine/storage compatibility, but inverse v0.1.0 does not reduce or trail.
+        s.reduceTriggerR = -999.0;
+        s.forceReduceR = -999.0;
+        s.reduceFraction = 0.0;
         s.beTriggerR = d("beTriggerR", 1.5);
-        s.trailTriggerR = d("trailTriggerR", 2.0);
-        s.trailAtrMult = d("trailAtrMult", 2.2);
+        s.trailTriggerR = 999.0;
+        s.trailAtrMult = 0.0;
         return s;
     }
 
-    public void saveCredentials(String key, String secret) {
+    public void saveCredentials(String key, String secret, String passphrase) {
         vault.put("apiKey", key == null ? "" : key.trim());
         vault.put("apiSecret", secret == null ? "" : secret.trim());
+        vault.put("apiPassphrase", passphrase == null ? "" : passphrase.trim());
     }
 
     public void saveBasic(boolean testnet, boolean live, double risk, int universe) {
