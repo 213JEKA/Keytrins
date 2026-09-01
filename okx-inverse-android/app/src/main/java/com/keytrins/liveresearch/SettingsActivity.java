@@ -17,7 +17,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class SettingsActivity extends android.app.Activity {
-    private EditText apiKey, apiSecret, riskInput, universeInput;
+    private EditText apiKey, apiSecret, apiPassphrase, riskInput, universeInput;
     private Switch testnetSwitch, liveSwitch;
     private SettingsStore store;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -29,6 +29,7 @@ public class SettingsActivity extends android.app.Activity {
 
         apiKey = findViewById(R.id.apiKey);
         apiSecret = findViewById(R.id.apiSecret);
+        apiPassphrase = findViewById(R.id.apiPassphrase);
         riskInput = findViewById(R.id.riskInput);
         universeInput = findViewById(R.id.universeInput);
         testnetSwitch = findViewById(R.id.testnetSwitch);
@@ -60,7 +61,9 @@ public class SettingsActivity extends android.app.Activity {
         SettingsStore.Snapshot s = store.load();
         apiKey.setText(s.apiKey);
         apiSecret.setText(s.apiSecret);
+        apiPassphrase.setText(s.apiPassphrase);
         apiSecret.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        apiPassphrase.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         testnetSwitch.setChecked(s.testnet);
         liveSwitch.setChecked(s.live);
         riskInput.setText(String.format(Locale.US, "%.2f", s.riskUsdt));
@@ -73,7 +76,10 @@ public class SettingsActivity extends android.app.Activity {
             int universe = Integer.parseInt(universeInput.getText().toString().trim());
             if (risk <= 0 || risk > 100) throw new IllegalArgumentException("Риск должен быть 0–100 USDT");
             if (universe < 1 || universe > 100) throw new IllegalArgumentException("Активов должно быть 1–100");
-            store.saveCredentials(apiKey.getText().toString(), apiSecret.getText().toString());
+            store.saveCredentials(
+                    apiKey.getText().toString(),
+                    apiSecret.getText().toString(),
+                    apiPassphrase.getText().toString());
             store.saveBasic(testnetSwitch.isChecked(), liveSwitch.isChecked(), risk, universe);
             if (toast) Toast.makeText(this, "Настройки сохранены", Toast.LENGTH_SHORT).show();
             return true;
