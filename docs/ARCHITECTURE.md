@@ -2,15 +2,16 @@
 
 The immutable signal path is:
 
-`OKX public closed candles -> OkxStrategyCore -> CanonicalSignal -> OKX protected entry -> follower fan-out -> inverse direction`
+`OKX public closed candles -> OkxStrategyCore -> immutable CanonicalSignal -> parallel OKX/Bybit/KuCoin execution -> inverse direction`
 
 `OkxStrategyCore` is the only strategy implementation. Its formulas are a direct C# port of
 `StrategyEngine.java` blob `67efa3610582267ed6e12fa46be376768f4c76fe` from branch
 `okx-inverse-android-v01`. Target exchange adapters contain no candle or indicator inputs.
 
-OKX is the execution leader as well as the signal source. Bybit and KuCoin Futures are allowed to receive the
-canonical signal only after OKX exchange truth confirms both the position and its attached initial stop. A follower
-rejection is isolated to that follower and never closes or invalidates an already protected OKX position.
+OKX is the sole market-data and `CanonicalSignal` source. OKX, Bybit and KuCoin Futures receive the same immutable
+signal concurrently and execute independently. Every venue calculates its own quantity and mandatory initial stop
+from its current quote, instrument rules, verified fee rate and the common risk settings. Rejection on one venue never
+suppresses or closes a valid protected entry on another venue.
 
 The server owns state and control. Windows Terminal and the PWA call the server API and never store exchange
 credentials or communicate with exchanges. SQLite uses WAL and persists signals, one-per-exchange route attempts,

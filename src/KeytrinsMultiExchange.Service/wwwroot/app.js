@@ -79,7 +79,9 @@ function exchangeCard(exchange, lastAttempt) {
     metricsNode.append(span);
   });
   card.querySelector('.lastResult').textContent = `Последний значимый результат: ${lastAttempt?.result ?? '—'}`;
-  card.querySelector('.lastReason').textContent = lastAttempt?.reason ?? 'Сигналов для этой биржи ещё не было.';
+  card.querySelector('.lastReason').textContent = lastAttempt
+    ? `${lastAttempt.reasonExplanation ?? lastAttempt.reason} [код: ${lastAttempt.reason}]`
+    : 'Сигналов для этой биржи ещё не было.';
   card.querySelector('.detail').textContent = `Проверка подключения: ${exchange.detail}`;
   return node;
 }

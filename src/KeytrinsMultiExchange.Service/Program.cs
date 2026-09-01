@@ -98,7 +98,12 @@ app.MapGet("/api/status", (RuntimeSnapshot state, RuntimeSettingsStore settings)
     tradingEnabled = settings.Current.TradingEnabled,
     mutationGate = settings.Current.TradingEnabled ? "ARMED" : "DISARMED",
     exchanges = state.Exchanges.Values.OrderBy(x => x.Exchange).ToArray(),
-    lastRouteAttempts = state.LastRouteAttempts.Values.OrderBy(x => x.Exchange).ToArray(),
+    lastRouteAttempts = state.LastRouteAttempts.Values.OrderBy(x => x.Exchange).Select(x => new
+    {
+        x.Exchange, x.SignalId, x.ReceivedAt, x.SubmittedAt, x.FilledAt, x.Result, x.Reason,
+        reasonExplanation = RouteReasonCatalog.Explain(x.Reason),
+        x.EntryPrice, x.Quantity, x.OrderId, x.ExecutionLatencyMs
+    }).ToArray(),
     positions = state.Positions.Values.OrderBy(x => x.Exchange).ThenBy(x => x.Symbol).ToArray(),
     externalPositions = state.ExternalPositions.Select(x => new
     {

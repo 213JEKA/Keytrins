@@ -268,7 +268,9 @@ public partial class MainWindow : Window
                 Public = YesNo(Flag(item, "publicConnected")), Private = YesNo(authenticated), Trade = YesNo(trading),
                 Withdraw = YesNo(withdraw), Positions = Text(item, "openPositionCount"),
                 LastResult = lastAttempt.ValueKind == JsonValueKind.Object ? Text(lastAttempt, "result") : "—",
-                LastReason = lastAttempt.ValueKind == JsonValueKind.Object ? Text(lastAttempt, "reason") : "—",
+                LastReason = lastAttempt.ValueKind == JsonValueKind.Object
+                    ? Text(lastAttempt, "reasonExplanation") + $" [код: {Text(lastAttempt, "reason")}]"
+                    : "—",
                 Detail = Text(item, "detail")
             });
         }
