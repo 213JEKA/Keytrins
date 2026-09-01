@@ -88,6 +88,10 @@ function positionRow(position) {
   return `<div class="row"><b>${esc(position.exchange)} ${esc(position.symbol)}</b><span>${esc(position.direction)}</span><span>signal ${esc(position.signalId)}</span><span>entry ${esc(position.entryPrice)}</span><span>mark ${esc(position.markPrice)}</span><span>qty ${esc(position.remainingQuantity)}</span><span>peak ${esc(position.peakNetProfitUsdt)}</span><span>protected ${esc(position.protectedNetProfitUsdt)}</span><span>stop ${esc(position.currentStop)}</span></div>`;
 }
 
+function externalPositionRow(position) {
+  return `<div class="row"><b>${esc(position.exchange)} ${esc(position.symbol)}</b><span>ВНЕШНЯЯ</span><span>${esc(position.direction)}</span><span>entry ${esc(position.entryPrice)}</span><span>mark ${esc(position.markPrice)}</span><span>qty ${esc(position.quantity)}</span><span>stop ${esc(position.stopPrice)}</span><span>leverage ${esc(position.leverage)}</span></div>`;
+}
+
 async function refresh() {
   try {
     const status = await api('/api/status');
@@ -104,7 +108,10 @@ async function refresh() {
     const grid = $('#exchangeGrid');
     grid.replaceChildren();
     status.exchanges.forEach(exchange => grid.append(exchangeCard(exchange, attempts.get(exchange.exchange))));
-    $('#positions').innerHTML = status.positions.length ? status.positions.map(positionRow).join('') : 'Открытых позиций нет';
+    $('#positions').innerHTML = status.positions.length ? status.positions.map(positionRow).join('') : 'Открытых позиций терминала нет';
+    $('#externalPositions').innerHTML = status.externalPositions.length
+      ? status.externalPositions.map(externalPositionRow).join('')
+      : 'Внешних позиций нет';
     $('#serverInfo').textContent = JSON.stringify(status, null, 2);
   } catch (error) {
     $('#connection').textContent = error.message;

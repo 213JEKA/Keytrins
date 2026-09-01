@@ -134,7 +134,7 @@ public sealed record ExchangeSnapshot(
 public sealed class RuntimeSnapshot
 {
     public DateTimeOffset StartedAt { get; } = DateTimeOffset.UtcNow;
-    public string Version { get; init; } = "1.1.6";
+    public string Version { get; init; } = "1.1.7";
     public volatile string MasterHealth = "STARTING";
     public volatile string MasterDetail = "initializing";
     public volatile string? LastSignalId;
@@ -145,6 +145,7 @@ public sealed class RuntimeSnapshot
     public volatile string WriterExclusivityDetail = "not checked";
     public ConcurrentDictionary<ExchangeId, ExchangeSnapshot> Exchanges { get; } = new();
     public ConcurrentDictionary<string, ManagedPosition> Positions { get; } = new();
+    public ConcurrentDictionary<string, ExchangePositionTruth> ExternalPositions { get; } = new();
     public ConcurrentDictionary<ExchangeId, RouteAttempt> LastRouteAttempts { get; } = new();
 }
 

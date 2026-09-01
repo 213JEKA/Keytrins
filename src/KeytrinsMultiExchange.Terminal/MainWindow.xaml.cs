@@ -109,7 +109,7 @@ public partial class MainWindow : Window
                 ? attempts.EnumerateArray().ToDictionary(x => Text(x, "exchange"), StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
             ExchangeGrid.ItemsSource = ExchangeRows(root.GetProperty("exchanges"), lastAttempts, selected, liveEnabled);
-            PositionGrid.ItemsSource = Rows(root.GetProperty("positions"));
+            PositionGrid.ItemsSource = PositionRows(root.GetProperty("positions"), root.GetProperty("externalPositions"));
             MasterStatus.Text = (root.GetProperty("masterHealth").GetString() ?? "—") +
                 (liveEnabled ? " • LIVE ВКЛЮЧЁН" : " • LIVE ЗАБЛОКИРОВАН");
             UniverseStatus.Text = "Universe " + root.GetProperty("universeCount");
@@ -220,6 +220,31 @@ public partial class MainWindow : Window
             table.Rows.Add(row);
         }
         return table.DefaultView;
+    }
+
+    private static DataView PositionRows(JsonElement managed, JsonElement external)
+    {
+        var table = new DataTable();
+        table.Columns.Add("ownership", typeof(string));
+        AddPositionRows(table, managed, "УПРАВЛЯЕТСЯ ТЕРМИНАЛОМ");
+        AddPositionRows(table, external, "ВНЕШНЯЯ • ТОЛЬКО НАБЛЮДЕНИЕ");
+        return table.DefaultView;
+    }
+
+    private static void AddPositionRows(DataTable table, JsonElement array, string ownership)
+    {
+        foreach (var item in array.EnumerateArray())
+        {
+            foreach (var property in item.EnumerateObject())
+                if (!table.Columns.Contains(property.Name)) table.Columns.Add(property.Name, typeof(string));
+            var row = table.NewRow();
+            row["ownership"] = ownership;
+            foreach (var property in item.EnumerateObject())
+                row[property.Name] = property.Value.ValueKind == JsonValueKind.String
+                    ? property.Value.GetString() ?? ""
+                    : property.Value.ToString();
+            table.Rows.Add(row);
+        }
     }
 
     private static ObservableCollection<ExchangeRow> ExchangeRows(JsonElement array,

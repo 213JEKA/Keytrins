@@ -68,8 +68,9 @@ app.MapGet("/api/health", async (RuntimeSnapshot state, RuntimeSettingsStore set
     var unresolved = await database.CountUnresolvedExecutionCommandsAsync(ct);
     var unresolvedRisk = await database.CountUnresolvedRiskActionsAsync(ct);
     var managedOpen = await database.CountOpenManagedPositionsAsync(ct);
-    var exchangeOpen = state.Exchanges.Values.Sum(x => x.OpenPositionCount);
-    var unmanagedOpen = Math.Max(0, exchangeOpen - managedOpen);
+    var exchangeOpen = Math.Max(state.Exchanges.Values.Sum(x => x.OpenPositionCount),
+        managedOpen + state.ExternalPositions.Count);
+    var unmanagedOpen = Math.Max(state.ExternalPositions.Count, exchangeOpen - managedOpen);
     return Results.Ok(new
     {
         status = state.MasterHealth == "ERROR" || unresolved > 0 || unresolvedRisk > 0 || unmanagedOpen > 0 ||
@@ -98,7 +99,13 @@ app.MapGet("/api/status", (RuntimeSnapshot state, RuntimeSettingsStore settings)
     mutationGate = settings.Current.TradingEnabled ? "ARMED" : "DISARMED",
     exchanges = state.Exchanges.Values.OrderBy(x => x.Exchange).ToArray(),
     lastRouteAttempts = state.LastRouteAttempts.Values.OrderBy(x => x.Exchange).ToArray(),
-    positions = state.Positions.Values.OrderBy(x => x.Exchange).ThenBy(x => x.Symbol).ToArray()
+    positions = state.Positions.Values.OrderBy(x => x.Exchange).ThenBy(x => x.Symbol).ToArray(),
+    externalPositions = state.ExternalPositions.Select(x => new
+    {
+        exchange = x.Key.Split(':', 2)[0],
+        x.Value.Symbol, x.Value.Direction, x.Value.Quantity, x.Value.EntryPrice, x.Value.MarkPrice,
+        x.Value.StopPrice, x.Value.StopOrderId, x.Value.IsOneWay, x.Value.ObservedAt, x.Value.Leverage
+    }).OrderBy(x => x.exchange).ThenBy(x => x.Symbol).ToArray()
 }));
 app.MapGet("/api/history", async (TradingDatabase db, int? limit, CancellationToken ct) =>
     Results.Ok(await db.QueryAsync("route_attempts", limit ?? 100, ct)));

@@ -21,21 +21,17 @@ public sealed class PositionManager
     public async Task RunOnceAsync(RuntimeOptions options, CancellationToken cancellationToken)
     {
         var positions = await _database.LoadOpenManagedPositionsAsync(cancellationToken);
-        foreach (var group in positions.GroupBy(x => x.Exchange))
+        foreach (var transport in _transports.Values.OrderBy(x => x.Id))
         {
-            if (!_transports.TryGetValue(group.Key, out var transport))
-            {
-                await _database.AppendLogAsync("POSITION_MANAGER_ERROR", "LIVE_TRANSPORT_NOT_AVAILABLE",
-                    group.Key.ToString(), null, cancellationToken);
-                continue;
-            }
+            var group = positions.Where(position => position.Exchange == transport.Id).ToArray();
 
-            var gate = _locks.For(group.Key);
+            var gate = _locks.For(transport.Id);
             await gate.WaitAsync(cancellationToken);
             try
             {
                 var truths = await transport.GetOpenPositionsAsync(cancellationToken);
-                foreach (var external in truths.Where(x => group.All(p => FindTruth(p, [x]) is null)))
+                var externalTruths = truths.Where(x => group.All(p => FindTruth(p, [x]) is null)).ToArray();
+                foreach (var external in externalTruths)
                 {
                     var externalKey = $"{transport.Id}:{external.Symbol}:{external.Direction}";
                     if (_reportedExternal.Add(externalKey))
@@ -43,7 +39,8 @@ public sealed class PositionManager
                             $"{external.Symbol}:{external.Direction}:qty={external.Quantity}", transport.Id.ToString(), null,
                             cancellationToken);
                 }
-                await ReconcilePendingAsync(transport, group.ToArray(), truths, cancellationToken);
+                SyncExternalSnapshot(transport.Id, externalTruths);
+                await ReconcilePendingAsync(transport, group, truths, cancellationToken);
 
                 foreach (var position in group)
                 {
@@ -88,12 +85,25 @@ public sealed class PositionManager
             catch (Exception exception)
             {
                 await _database.AppendLogAsync("POSITION_MANAGER_ERROR",
-                    exception.GetType().Name + ":" + exception.Message, group.Key.ToString(), null, cancellationToken);
+                    exception.GetType().Name + ":" + exception.Message, transport.Id.ToString(), null, cancellationToken);
             }
             finally { gate.Release(); }
         }
 
     }
+
+    private void SyncExternalSnapshot(ExchangeId exchange, IEnumerable<ExchangePositionTruth> externalTruths)
+    {
+        var prefix = exchange + ":";
+        var current = externalTruths.ToDictionary(truth => ExternalKey(exchange, truth), StringComparer.OrdinalIgnoreCase);
+        foreach (var stale in _snapshot.ExternalPositions.Keys.Where(key =>
+                     key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && !current.ContainsKey(key)).ToArray())
+            _snapshot.ExternalPositions.TryRemove(stale, out _);
+        foreach (var item in current) _snapshot.ExternalPositions[item.Key] = item.Value;
+    }
+
+    private static string ExternalKey(ExchangeId exchange, ExchangePositionTruth truth) =>
+        $"{exchange}:{truth.Symbol}:{truth.Direction}";
 
     public async Task<int> RequestCloseExchangeAsync(ExchangeId exchange, string reason,
         CancellationToken cancellationToken)

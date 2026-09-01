@@ -95,6 +95,31 @@ public sealed class PositionManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task External_position_is_visible_but_never_adopted_or_mutated()
+    {
+        var database = await DatabaseAsync();
+        var transport = new FakeTransport(ExchangeId.Okx,
+        [
+            Truth(TradeDirection.Short, 0.3748m, 0m) with
+            {
+                Symbol = "CRV-USDT-SWAP", Quantity = 233m, EntryPrice = 0.3727m
+            }
+        ]);
+        var snapshot = new RuntimeSnapshot();
+        var manager = new PositionManager(database, [transport], new ExchangeOperationLocks(), snapshot);
+
+        await manager.RunOnceAsync(Options(), default);
+
+        var external = Assert.Single(snapshot.ExternalPositions).Value;
+        Assert.Equal("CRV-USDT-SWAP", external.Symbol);
+        Assert.Equal(TradeDirection.Short, external.Direction);
+        Assert.Equal(233m, external.Quantity);
+        Assert.Empty(await database.LoadOpenManagedPositionsAsync(default));
+        Assert.Equal(0, transport.StopCount);
+        Assert.Equal(0, transport.CloseCount);
+    }
+
+    [Fact]
     public async Task Manual_close_all_is_persistent_reduce_only_and_deduplicated()
     {
         var database = await DatabaseAsync(); var position = Position(TradeDirection.Short);
