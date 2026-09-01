@@ -17,8 +17,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class SettingsActivity extends android.app.Activity {
-    private EditText apiKey, apiSecret, apiPassphrase, riskInput, universeInput;
-    private Switch testnetSwitch, liveSwitch;
+    private EditText apiKey, apiSecret, apiPassphrase, apiKeyVersion, riskInput, universeInput;
+    private Switch liveSwitch;
     private SettingsStore store;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
 
@@ -30,9 +30,9 @@ public class SettingsActivity extends android.app.Activity {
         apiKey = findViewById(R.id.apiKey);
         apiSecret = findViewById(R.id.apiSecret);
         apiPassphrase = findViewById(R.id.apiPassphrase);
+        apiKeyVersion = findViewById(R.id.apiKeyVersion);
         riskInput = findViewById(R.id.riskInput);
         universeInput = findViewById(R.id.universeInput);
-        testnetSwitch = findViewById(R.id.testnetSwitch);
         liveSwitch = findViewById(R.id.liveSwitch);
         Button save = findViewById(R.id.saveSettingsButton);
         Button doctor = findViewById(R.id.doctorApiButton);
@@ -62,9 +62,9 @@ public class SettingsActivity extends android.app.Activity {
         apiKey.setText(s.apiKey);
         apiSecret.setText(s.apiSecret);
         apiPassphrase.setText(s.apiPassphrase);
+        apiKeyVersion.setText(s.apiKeyVersion);
         apiSecret.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         apiPassphrase.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        testnetSwitch.setChecked(s.testnet);
         liveSwitch.setChecked(s.live);
         riskInput.setText(String.format(Locale.US, "%.2f", s.riskUsdt));
         universeInput.setText(Integer.toString(s.universeSize));
@@ -74,13 +74,17 @@ public class SettingsActivity extends android.app.Activity {
         try {
             double risk = Double.parseDouble(riskInput.getText().toString().trim().replace(',', '.'));
             int universe = Integer.parseInt(universeInput.getText().toString().trim());
+            String keyVersion=apiKeyVersion.getText().toString().trim();
             if (risk <= 0 || risk > 100) throw new IllegalArgumentException("Риск должен быть 0–100 USDT");
             if (universe < 1 || universe > 100) throw new IllegalArgumentException("Активов должно быть 1–100");
+            if (keyVersion.isEmpty()) keyVersion="3";
+            if (!keyVersion.matches("[0-9]+")) throw new IllegalArgumentException("API key version должна быть числом");
             store.saveCredentials(
                     apiKey.getText().toString(),
                     apiSecret.getText().toString(),
-                    apiPassphrase.getText().toString());
-            store.saveBasic(testnetSwitch.isChecked(), liveSwitch.isChecked(), risk, universe);
+                    apiPassphrase.getText().toString(),
+                    keyVersion);
+            store.saveBasic(false, liveSwitch.isChecked(), risk, universe);
             if (toast) Toast.makeText(this, "Настройки сохранены", Toast.LENGTH_SHORT).show();
             return true;
         } catch (Exception e) {
