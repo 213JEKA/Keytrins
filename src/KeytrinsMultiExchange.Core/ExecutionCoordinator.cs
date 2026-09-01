@@ -29,25 +29,13 @@ public sealed class ExecutionCoordinator
         _entryConfirmationPollInterval = entryConfirmationPollInterval ?? TimeSpan.FromMilliseconds(300);
     }
 
-    public async Task<IReadOnlyList<RouteAttempt>> RouteOkxLeaderAsync(CanonicalSignal signal,
+    public async Task<IReadOnlyList<RouteAttempt>> RouteParallelAsync(CanonicalSignal signal,
         RuntimeOptions options, CancellationToken cancellationToken)
     {
-        var okx = await RouteSafelyAsync(ExchangeId.Okx, signal, options, cancellationToken);
-        if (okx.Result != RouteResult.Filled)
-        {
-            var reason = "MASTER_OKX_NOT_PROTECTED_" + okx.Reason;
-            return
-            [
-                okx,
-                Skip(ExchangeId.Bybit, signal, DateTimeOffset.UtcNow, reason),
-                Skip(ExchangeId.KuCoinFutures, signal, DateTimeOffset.UtcNow, reason)
-            ];
-        }
-
-        var followers = await Task.WhenAll(
+        return await Task.WhenAll(
+            RouteSafelyAsync(ExchangeId.Okx, signal, options, cancellationToken),
             RouteSafelyAsync(ExchangeId.Bybit, signal, options, cancellationToken),
             RouteSafelyAsync(ExchangeId.KuCoinFutures, signal, options, cancellationToken));
-        return [okx, .. followers];
     }
 
     public async Task<RouteAttempt> RouteAsync(ExchangeId exchange, CanonicalSignal signal, RuntimeOptions options,

@@ -120,7 +120,11 @@ public sealed class OkxLiveExecutionTransport(
         if (data.GetArrayLength() == 0) return new(MutationDisposition.Rejected, null, null, "EMPTY_ORDER_RESPONSE", DateTimeOffset.UtcNow);
         var item = data[0]; var subCode = Text(item, "sCode");
         if (subCode.Length > 0 && subCode != "0")
-            return new(MutationDisposition.Rejected, Text(item, "ordId"), null, "OKX_" + subCode, DateTimeOffset.UtcNow);
+        {
+            var detail = Text(item, "sMsg");
+            var reason = new ExchangeApiException("OKX_" + subCode, detail).Message;
+            return new(MutationDisposition.Rejected, Text(item, "ordId"), null, reason, DateTimeOffset.UtcNow);
+        }
         return new(MutationDisposition.Accepted, Text(item, "ordId"), stopId, "ACCEPTED", DateTimeOffset.UtcNow);
     }
 

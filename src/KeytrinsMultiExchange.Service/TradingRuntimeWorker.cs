@@ -106,8 +106,8 @@ public sealed class TradingRuntimeWorker(
             finally { semaphore.Release(); }
         });
         await Task.WhenAll(tasks);
-        // Preserve every valid StrategyCore signal, but process signal groups serially. OKX must fill with its
-        // exchange-side stop confirmed before the active followers are routed concurrently.
+        // Preserve every valid StrategyCore signal and process signal groups serially. Within one signal group,
+        // OKX, Bybit and KuCoin route independently and concurrently from the same immutable CanonicalSignal.
         foreach (var signal in signals.OrderBy(x => x.Key).Select(x => x.Value))
             await PublishAsync(signal, cancellationToken);
         await RunPreflightAsync(cancellationToken);
@@ -163,7 +163,7 @@ public sealed class TradingRuntimeWorker(
             }
             return;
         }
-        var attempts = await execution.RouteOkxLeaderAsync(signal, configured, cancellationToken);
+        var attempts = await execution.RouteParallelAsync(signal, configured, cancellationToken);
         foreach (var attempt in attempts)
         {
             RememberMeaningfulAttempt(attempt);

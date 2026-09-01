@@ -117,7 +117,7 @@ public sealed class ExecutionCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task Followers_are_not_submitted_until_okx_entry_and_stop_are_confirmed()
+    public async Task Okx_rejection_does_not_suppress_parallel_follower_execution()
     {
         var database = await DatabaseAsync(); var signal = Signal(); await database.InsertSignalOnceAsync(signal, default);
         var okx = new DeterministicTransport(ExchangeId.Okx) { SubmitApiError = "MASTER_REJECTED" };
@@ -125,17 +125,36 @@ public sealed class ExecutionCoordinatorTests : IDisposable
         var kucoin = new DeterministicTransport(ExchangeId.KuCoinFutures);
         var coordinator = new ExecutionCoordinator(database, [okx, bybit, kucoin], new ExchangeOperationLocks());
 
-        var results = await coordinator.RouteOkxLeaderAsync(signal, OptionsAllActive(), default);
+        var results = await coordinator.RouteParallelAsync(signal, OptionsAllActive(), default);
 
-        Assert.Equal(RouteResult.Rejected, results[0].Result);
-        Assert.All(results.Skip(1), x =>
-        {
-            Assert.Equal(RouteResult.Skipped, x.Result);
-            Assert.StartsWith("MASTER_OKX_NOT_PROTECTED_", x.Reason);
-        });
+        Assert.Equal(RouteResult.Rejected, results.Single(x => x.Exchange == ExchangeId.Okx).Result);
+        Assert.Equal(RouteResult.Filled, results.Single(x => x.Exchange == ExchangeId.Bybit).Result);
+        Assert.Equal(RouteResult.Filled, results.Single(x => x.Exchange == ExchangeId.KuCoinFutures).Result);
         Assert.Equal(1, okx.SubmitCount);
-        Assert.Equal(0, bybit.SubmitCount);
-        Assert.Equal(0, kucoin.SubmitCount);
+        Assert.Equal(1, bybit.SubmitCount);
+        Assert.Equal(1, kucoin.SubmitCount);
+    }
+
+    [Fact]
+    public async Task Followers_do_not_wait_for_okx_submit_to_complete()
+    {
+        var database = await DatabaseAsync(); var signal = Signal(); await database.InsertSignalOnceAsync(signal, default);
+        var okx = new DeterministicTransport(ExchangeId.Okx) { BlockSubmit = true };
+        var bybit = new DeterministicTransport(ExchangeId.Bybit);
+        var kucoin = new DeterministicTransport(ExchangeId.KuCoinFutures);
+        var coordinator = new ExecutionCoordinator(database, [okx, bybit, kucoin], new ExchangeOperationLocks());
+
+        var routing = coordinator.RouteParallelAsync(signal, OptionsAllActive(), default);
+        await okx.SubmitStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await bybit.SubmitStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await kucoin.SubmitStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(1, bybit.SubmitCount);
+        Assert.Equal(1, kucoin.SubmitCount);
+        Assert.False(routing.IsCompleted);
+        okx.ReleaseSubmit.TrySetResult();
+        var results = await routing;
+        Assert.All(results, result => Assert.Equal(RouteResult.Filled, result.Result));
     }
 
     [Fact]
@@ -147,7 +166,7 @@ public sealed class ExecutionCoordinatorTests : IDisposable
         var kucoin = new DeterministicTransport(ExchangeId.KuCoinFutures);
         var coordinator = new ExecutionCoordinator(database, [okx, bybit, kucoin], new ExchangeOperationLocks());
 
-        var results = await coordinator.RouteOkxLeaderAsync(signal, OptionsAllActive(), default);
+        var results = await coordinator.RouteParallelAsync(signal, OptionsAllActive(), default);
 
         Assert.Equal(RouteResult.Filled, results.Single(x => x.Exchange == ExchangeId.Okx).Result);
         Assert.Equal(RouteResult.Rejected, results.Single(x => x.Exchange == ExchangeId.Bybit).Result);
