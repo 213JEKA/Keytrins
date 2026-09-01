@@ -14,7 +14,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Настройки"
+            android:text="Настройки OKX Inverse"
             android:textColor="@color/text"
             android:textSize="25sp"
             android:textStyle="bold" />
@@ -23,7 +23,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Торговля, стратегия, API и диагностика"
+            android:text="Торговля, риск, Universe, API и диагностика"
             android:textColor="@color/muted"
             android:textSize="14sp" />
 
@@ -47,7 +47,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Реальная торговля"
+                android:text="LIVE — реальная торговля"
                 android:textColor="@color/text" />
 
             <LinearLayout
@@ -75,6 +75,14 @@
                     android:textColor="@color/text"
                     android:textColorHint="@color/muted" />
             </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="OKX: One-Way / net_mode • Cross • 5x"
+                android:textColor="@color/muted"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -87,7 +95,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Стратегия v2 • LEVEL/REGIME FIRST"
+                android:text="OKX Inverse • защита прибыли"
                 android:textColor="@color/text"
                 android:textSize="18sp"
                 android:textStyle="bold" />
@@ -96,7 +104,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Сначала режим и положение цены, потом направление входа.\nТренд: LONG только из нижней зоны восходящего канала • SHORT только из верхней зоны нисходящего.\nБоковик: середина = NO TRADE • верх = SHORT только после отбоя, LONG только после пробоя + ретеста • низ зеркально.\nПеред входом требуется свободный ход до ближайшего уровня ≥1.05R. Переходный/конфликтный режим = WAIT.\nPrimary: -0.20R + слом → закрыть 85% • -0.35R → закрыть остаток.\nHEDGE: -0.15 ENTRY ATR, fail-safe -0.15R • встречка 100% • $0.50/$0.50 • TP нет."
+                android:text="Входная логика OKX Inverse сохранена: фактическое направление сделки противоположно исходному сигналу.\n\nProfit-lock: шаг $1 / отставание $1. Peak +$1 → BE + издержки • +$2 → защита около +$1 • +$3 → около +$2 • дальше без лимита. Фиксированного TP нет.\n\nКомиссии, spread и tick-buffer входят в расчёт защищённого результата. Если серверный SL не успел обновиться и цена пересекла защищённый уровень, остаток позиции закрывается reduce-only market catch-up.\n\nЗащитный SL двигается только в сторону прибыли и никогда не ослабляется. Peak и Protected сохраняются в SQLite между перезапусками."
                 android:textColor="@color/muted"
                 android:textSize="13sp" />
         </LinearLayout>
@@ -111,7 +119,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Bybit API"
+                android:text="OKX API"
                 android:textColor="@color/text"
                 android:textSize="18sp"
                 android:textStyle="bold" />
@@ -137,19 +145,30 @@
                 android:textColor="@color/text"
                 android:textColorHint="@color/muted" />
 
+            <EditText
+                android:id="@+id/apiPassphrase"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:hint="API passphrase"
+                android:inputType="textPassword"
+                android:singleLine="true"
+                android:textColor="@color/text"
+                android:textColorHint="@color/muted" />
+
             <Switch
                 android:id="@+id/testnetSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="Testnet"
+                android:text="OKX Demo / simulated trading"
                 android:textColor="@color/text" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="Read + Derivatives Trade. Withdraw не включать. Secret хранится локально."
+                android:text="Права API: Read + Trade. Withdraw не включать. Key, secret и passphrase хранятся локально в Android Keystore."
                 android:textColor="@color/muted"
                 android:textSize="12sp" />
         </LinearLayout>
