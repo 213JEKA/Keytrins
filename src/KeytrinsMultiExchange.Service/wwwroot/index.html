@@ -8,21 +8,21 @@
 <body>
   <header><div><div class="eyebrow">KEYTRINS • LIVE CONTROL</div><h1>Multi-Exchange Terminal</h1></div><span id="connection" class="pill warn">CONNECTING</span></header>
   <section class="auth"><input id="token" type="password" autocomplete="off" placeholder="Control token"><button id="saveToken">Подключиться</button></section>
-  <section id="master" class="master"><b>MASTER SIGNAL: OKX</b><span id="masterHealth">—</span><span id="universe">Universe —</span><span id="lastScan">last scan —</span><span id="lastSignal">last signal —</span></section>
+  <section id="master" class="master"><b>MASTER SIGNAL: OKX</b><span id="masterHealth">—</span><span id="mutationGate" class="pill warn">LIVE: —</span><span id="universe">Universe —</span><span id="lastScan">last scan —</span><span id="lastSignal">last signal —</span></section>
   <nav><button class="tab active" data-tab="main">Главная</button><button class="tab" data-tab="settings">Настройки</button><button class="tab" data-tab="history">История</button><button class="tab" data-tab="logs">Журнал</button><button class="tab" data-tab="server">Сервер</button></nav>
   <main>
-    <section id="main" class="pane active"><p class="hint">Отметьте нужные биржи и один раз нажмите «Включить выбранные».</p><div class="buttonRow batchActions"><button id="pauseSelected">ПАУЗА ВЫБРАННЫХ</button><button id="enableSelected" class="primary">ВКЛЮЧИТЬ ВЫБРАННЫЕ</button><button id="closeSelected" class="danger">ЗАКРЫТЬ И ОТКЛЮЧИТЬ</button></div><div id="exchangeGrid" class="grid"></div><h2>Позиции</h2><div id="positions" class="positions empty">Открытых позиций нет</div></section>
+    <section id="main" class="pane active"><p class="hint">Отметьте OKX и нужные ведомые биржи, затем один раз нажмите «Включить выбранные».</p><div class="buttonRow batchActions"><button id="pauseSelected">ПАУЗА ВЫБРАННЫХ</button><button id="enableSelected" class="primary">ВКЛЮЧИТЬ ВЫБРАННЫЕ</button><button id="closeSelected" class="danger">ЗАКРЫТЬ И ОТКЛЮЧИТЬ</button></div><div id="exchangeGrid" class="grid"></div><h2>Позиции</h2><div id="positions" class="positions empty">Открытых позиций нет</div></section>
     <section id="settings" class="pane">
       <div class="settingsGrid">
         <article class="settingsCard"><h2>Основные настройки</h2><p class="hint">Рабочие параметры хранятся на сервере и применяются ко всем выбранным биржам.</p>
           <div class="formGrid">
-            <label>Сумма риска на позицию, USDT<input id="riskUsdt" type="number" min="0.1" max="100" step="0.1"></label>
-            <label>Максимальный чистый убыток на позицию, USDT<input id="maxNetLossUsdt" type="number" min="0.05" max="100" step="0.05"></label>
+            <label>Расчётный риск для размера позиции, USDT<input id="riskUsdt" type="number" min="0.1" max="100" step="0.1"></label>
+            <label>Аварийный лимит NET-убытка на одну позицию, USDT<input id="maxNetLossUsdt" type="number" min="0.05" max="100" step="0.05"></label>
             <label>Количество анализируемых пар<input id="universeSize" type="number" min="1" max="100" step="1"></label>
             <label class="advancedHidden">Плечо<input id="leverage" type="number" min="1" max="20" step="1"></label>
             <label class="advancedHidden">Макс. notional, USDT<input id="maxNotionalUsdt" type="number" min="10" max="10000" step="10"></label>
             <label class="advancedHidden">Макс. Cost/R<input id="maxCostR" type="number" min="0.01" max="1" step="0.01"></label>
-          </div><button id="saveRuntime" class="primary">СОХРАНИТЬ ПАРАМЕТРЫ</button><span id="runtimeResult" class="result"></span>
+          </div><p class="hint">NET-лимит учитывает комиссии входа/выхода, спред и запас проскальзывания. Если безопасный биржевой стоп нельзя поставить за текущей ценой, вход будет пропущен.</p><button id="saveRuntime" class="primary">СОХРАНИТЬ ПАРАМЕТРЫ</button><span id="runtimeResult" class="result"></span>
         </article>
         <article class="settingsCard"><h2>API-ключи бирж</h2><p class="hint">Ключи хранятся на сервере в зашифрованном виде и никогда не показываются обратно.</p>
           <label>Биржа<select id="credentialExchange"></select></label>
@@ -38,6 +38,6 @@
     <section id="logs" class="pane"><div id="logTable" class="table"></div></section>
     <section id="server" class="pane"><pre id="serverInfo">—</pre></section>
   </main>
-  <template id="exchangeTemplate"><article class="card"><div class="cardHead"><label class="exchangeSelect"><input type="checkbox"><h3></h3></label><span class="mode pill"></span></div><div class="metrics"></div><small class="detail"></small></article></template>
+  <template id="exchangeTemplate"><article class="card"><div class="cardHead"><label class="exchangeSelect"><input type="checkbox"><h3></h3></label><span class="mode pill"></span></div><div class="metrics"></div><div class="routeDetail"><b class="lastResult">Последняя попытка: —</b><span class="lastReason">—</span></div><small class="detail"></small></article></template>
   <script src="/app.js" defer></script>
 </body></html>

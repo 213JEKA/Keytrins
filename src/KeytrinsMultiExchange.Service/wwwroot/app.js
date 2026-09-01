@@ -1,21 +1,224 @@
-const $=s=>document.querySelector(s);let token=localStorage.getItem('keytrins-token')||'',settingsLoaded=false;const selectedExchanges=new Set();$('#token').value=token;
-const headers=()=>token?{Authorization:`Bearer ${token}`}:{},api=async(path,init={})=>{const r=await fetch(path,{...init,headers:{...headers(),...(init.headers||{})}});if(!r.ok){let m=`HTTP ${r.status}`;try{const x=await r.json();m=x.reason==='GLOBAL_TRADING_DISABLED'?'LIVE-исполнение ещё не запущено на сервере. Ключи проверены, но реальные заявки пока заблокированы.':x.reason==='EXECUTION_RECOVERY_NOT_READY'?'Сервер ещё не завершил восстановление заявок и позиций. Входы не включены.':x.reason==='FOREIGN_OKX_WRITER_ACTIVE'?'Другая программа продолжает отправлять реальные OKX-заявки. Входы автоматически поставлены на паузу.':x.reason==='OKX_EXCLUSIVE_WRITER_NOT_CONFIRMED'?'Старый OKX-клиент пока не исключён. Отключите его или ограничьте этот API-ключ IP-адресом 37.252.21.226.':x.reason==='EXCHANGE_NOT_FLAT'?'На выбранной бирже уже есть позиция, открытая не этим сервером. Она не будет подхвачена автоматически; сначала остановите старый клиент и штатно закройте его позицию.':x.reason==='PRIVATE_PREFLIGHT_FAILED'?'Проверьте ключи и One-Way режим на выбранных биржах.':(x.reason||m)}catch{}throw new Error(m)}return r.json()};
-$('#saveToken').onclick=()=>{token=$('#token').value.trim();localStorage.setItem('keytrins-token',token);refresh()};
-document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab,.pane').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#'+b.dataset.tab).classList.add('active');loadTab(b.dataset.tab)});
-const pill=(el,mode)=>{el.className='mode pill '+(mode==='Active'?'ok':mode==='Error'?'bad':'warn')};
-async function command(exchange,action){if(action.includes('close')&&!confirm(`${exchange}: подтвердить ${action}?`))return;try{await api(`/api/exchanges/${exchange}/${action}`,{method:'POST'});await refresh()}catch(e){alert(e.message)}}
-function exchangeCard(x){const node=$('#exchangeTemplate').content.cloneNode(true),card=node.querySelector('.card');card.querySelector('h3').textContent=x.exchange;const check=card.querySelector('input[type=checkbox]');check.checked=selectedExchanges.has(x.exchange);check.onchange=()=>check.checked?selectedExchanges.add(x.exchange):selectedExchanges.delete(x.exchange);const mode=card.querySelector('.mode');mode.textContent=x.mode;pill(mode,x.mode);card.querySelector('.metrics').innerHTML=`<span>Public: <b>${x.publicConnected?'OK':'—'}</b></span><span>Private: <b>${x.privateAuthenticated?'OK':'—'}</b></span><span>Trade: <b>${x.tradingPermission?'YES':'NO'}</b></span><span>Withdraw: <b>${x.withdrawPermission?'BLOCK!':'NO'}</b></span><span>Balance: <b>${x.balance??'—'}</b></span><span>Open: <b>${x.openPositionCount}</b></span>`;card.querySelector('.detail').textContent=x.detail;return node}
-function positionRow(x){return `<div class="row"><b>${x.exchange} ${x.symbol}</b><span>${x.direction}</span><span>signal ${x.signalId}</span><span>entry ${x.entryPrice}</span><span>mark ${x.markPrice}</span><span>qty ${x.remainingQuantity}</span><span>peak ${x.peakNetProfitUsdt}</span><span>protected ${x.protectedNetProfitUsdt}</span><span>stop ${x.currentStop}</span></div>`}
-async function refresh(){try{const s=await api('/api/status');$('#connection').textContent='ONLINE';$('#connection').className='pill ok';$('#masterHealth').textContent=s.masterHealth;$('#universe').textContent=`Universe ${s.universeCount}`;$('#lastScan').textContent=`last scan ${s.lastScanAt??'—'}`;$('#lastSignal').textContent=`last signal ${s.lastSignalId??'—'}`;const grid=$('#exchangeGrid');grid.innerHTML='';s.exchanges.forEach(x=>grid.append(exchangeCard(x)));$('#positions').innerHTML=s.positions.length?s.positions.map(positionRow).join(''):'Открытых позиций нет';$('#serverInfo').textContent=JSON.stringify(s,null,2)}catch(e){$('#connection').textContent=e.message;$('#connection').className='pill bad'}}
-async function loadTab(tab){if(tab==='history'){try{const rows=await api('/api/history?limit=100');$('#historyTable').innerHTML=rows.map(x=>`<div class="row">${Object.values(x).map(v=>`<span>${v??'—'}</span>`).join('')}</div>`).join('')}catch{}}if(tab==='logs'){try{const rows=await api('/api/logs?limit=200');$('#logTable').innerHTML=rows.map(x=>`<div class="row"><span>${x.at}</span><b>${x.category}</b><span>${x.exchange??'—'}</span><span>${x.message}</span></div>`).join('')}catch{}}}
-const exchanges=['Okx','Bybit','KuCoinFutures'];
-$('#credentialExchange').innerHTML=exchanges.map(x=>`<option value="${x}">${x}</option>`).join('');
-function showCredentialStatus(rows){$('#credentialStatus').innerHTML=exchanges.map(x=>`<span class="${rows[x]?'configured':''}">${x}: ${rows[x]?'настроен':'нет ключа'}</span>`).join('')}
-async function loadSettings(force=false){try{const s=await api('/api/settings');if(!settingsLoaded||force){$('#riskUsdt').value=s.runtime.riskUsdt;$('#maxNetLossUsdt').value=s.runtime.maxNetLossUsdt;$('#universeSize').value=s.runtime.universeSize;$('#leverage').value=s.runtime.leverage;$('#maxNotionalUsdt').value=s.runtime.maxNotionalUsdt;$('#maxCostR').value=s.runtime.maxCostR;settingsLoaded=true}showCredentialStatus(s.credentials)}catch(e){$('#runtimeResult').textContent=e.message}}
-$('#saveRuntime').onclick=async()=>{const body={riskUsdt:Number($('#riskUsdt').value),maxNetLossUsdt:Number($('#maxNetLossUsdt').value),universeSize:Number($('#universeSize').value),leverage:Number($('#leverage').value),maxNotionalUsdt:Number($('#maxNotionalUsdt').value),maxCostR:Number($('#maxCostR').value)};try{await api('/api/settings/runtime',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});$('#runtimeResult').textContent='Сохранено на сервере';await loadSettings(true)}catch(e){$('#runtimeResult').textContent=e.message}};
-$('#saveCredentials').onclick=async()=>{const exchange=$('#credentialExchange').value,body={apiKey:$('#apiKey').value,apiSecret:$('#apiSecret').value,passphrase:$('#passphrase').value};try{const saved=await api(`/api/settings/credentials/${exchange}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});$('#apiKey').value=$('#apiSecret').value=$('#passphrase').value='';$('#credentialResult').textContent=saved.verified?`${exchange}: ключ проверен и готов`:`${exchange}: сохранён, но не проверен — ${saved.detail}`;await loadSettings();await refresh()}catch(e){$('#credentialResult').textContent=e.message}};
-$('#clearCredentials').onclick=async()=>{const exchange=$('#credentialExchange').value;if(!confirm(`${exchange}: удалить сохранённый ключ?`))return;try{await api(`/api/settings/credentials/${exchange}`,{method:'DELETE'});$('#credentialResult').textContent=`${exchange}: сохранённый ключ удалён`;await loadSettings()}catch(e){$('#credentialResult').textContent=e.message}};
-const baseLoadTab=loadTab;loadTab=async tab=>{await baseLoadTab(tab);if(tab==='settings')await loadSettings()};
-async function batch(action){const exchanges=[...selectedExchanges];if(!exchanges.length){alert('Отметьте галочками нужные биржи.');return}if(action==='close-all-disable'&&!confirm(`Закрыть и отключить: ${exchanges.join(', ')}?`))return;try{if(action==='enable')await api('/api/exchanges/enable-selected',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({exchanges})});else for(const exchange of exchanges)await api(`/api/exchanges/${exchange}/${action}`,{method:'POST'});await refresh()}catch(e){alert(e.message)}}
-$('#pauseSelected').onclick=()=>batch('pause');$('#enableSelected').onclick=()=>batch('enable');$('#closeSelected').onclick=()=>batch('close-all-disable');
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/service-worker.js');refresh();setInterval(refresh,5000);
+const $ = selector => document.querySelector(selector);
+const esc = value => String(value ?? '—').replace(/[&<>"']/g, character => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[character]);
+let token = localStorage.getItem('keytrins-token') || '';
+let settingsLoaded = false;
+const selectedExchanges = new Set();
+const exchanges = ['Okx', 'Bybit', 'KuCoinFutures'];
+$('#token').value = token;
+
+const headers = () => token ? { Authorization: `Bearer ${token}` } : {};
+const api = async (path, init = {}) => {
+  const response = await fetch(path, { ...init, headers: { ...headers(), ...(init.headers || {}) } });
+  if (!response.ok) {
+    let message = `HTTP ${response.status}`;
+    try {
+      const body = await response.json();
+      const messages = {
+        GLOBAL_TRADING_DISABLED: 'LIVE-исполнение ещё не запущено на сервере. Ключи проверены, но реальные заявки пока заблокированы.',
+        EXECUTION_RECOVERY_NOT_READY: 'Сервер ещё не завершил восстановление заявок и позиций. Входы не включены.',
+        FOREIGN_OKX_WRITER_ACTIVE: 'Другая программа продолжает отправлять реальные OKX-заявки. Входы автоматически поставлены на паузу.',
+        OKX_EXCLUSIVE_WRITER_NOT_CONFIRMED: 'Старый OKX-клиент пока не исключён. Отключите его или ограничьте этот API-ключ IP-адресом 37.252.21.226.',
+        EXCHANGE_NOT_FLAT: 'На выбранной бирже уже есть позиция, открытая не этим сервером. Сначала остановите старый клиент и штатно закройте его позицию.',
+        PRIVATE_PREFLIGHT_FAILED: 'Проверьте ключи, торговые разрешения и One-Way режим на выбранных биржах.',
+        OKX_MASTER_REQUIRED: 'OKX — источник сигнала и обязательный лидер. Отметьте OKX вместе с нужными ведомыми биржами.',
+        NO_EXCHANGES_SELECTED: 'Отметьте хотя бы одну биржу.'
+      };
+      message = messages[body.reason] || body.reason || message;
+    } catch {}
+    throw new Error(message);
+  }
+  return response.json();
+};
+
+$('#saveToken').onclick = () => {
+  token = $('#token').value.trim();
+  localStorage.setItem('keytrins-token', token);
+  refresh();
+};
+
+document.querySelectorAll('.tab').forEach(button => button.onclick = () => {
+  document.querySelectorAll('.tab,.pane').forEach(element => element.classList.remove('active'));
+  button.classList.add('active');
+  $('#' + button.dataset.tab).classList.add('active');
+  loadTab(button.dataset.tab);
+});
+
+const setPill = (element, mode) => {
+  element.className = 'mode pill ' + (mode === 'Active' ? 'ok' : mode === 'Error' ? 'bad' : 'warn');
+};
+
+function exchangeCard(exchange, lastAttempt) {
+  const node = $('#exchangeTemplate').content.cloneNode(true);
+  const card = node.querySelector('.card');
+  card.querySelector('h3').textContent = exchange.exchange;
+  const check = card.querySelector('input[type=checkbox]');
+  check.checked = selectedExchanges.has(exchange.exchange);
+  check.onchange = () => check.checked
+    ? selectedExchanges.add(exchange.exchange)
+    : selectedExchanges.delete(exchange.exchange);
+  const mode = card.querySelector('.mode');
+  mode.textContent = exchange.mode;
+  setPill(mode, exchange.mode);
+  const metrics = [
+    ['Public', exchange.publicConnected ? 'OK' : '—'],
+    ['Private', exchange.privateAuthenticated ? 'OK' : '—'],
+    ['Trade', exchange.tradingPermission ? 'YES' : 'NO'],
+    ['Withdraw', exchange.withdrawPermission ? 'BLOCK!' : 'NO'],
+    ['Balance', exchange.balance ?? '—'],
+    ['Open', exchange.openPositionCount]
+  ];
+  const metricsNode = card.querySelector('.metrics');
+  metrics.forEach(([name, value]) => {
+    const span = document.createElement('span');
+    span.textContent = `${name}: `;
+    const strong = document.createElement('b');
+    strong.textContent = value;
+    span.append(strong);
+    metricsNode.append(span);
+  });
+  card.querySelector('.lastResult').textContent = `Последняя попытка: ${lastAttempt?.result ?? '—'}`;
+  card.querySelector('.lastReason').textContent = lastAttempt?.reason ?? 'Сигналов для этой биржи ещё не было.';
+  card.querySelector('.detail').textContent = `Проверка подключения: ${exchange.detail}`;
+  return node;
+}
+
+function positionRow(position) {
+  return `<div class="row"><b>${esc(position.exchange)} ${esc(position.symbol)}</b><span>${esc(position.direction)}</span><span>signal ${esc(position.signalId)}</span><span>entry ${esc(position.entryPrice)}</span><span>mark ${esc(position.markPrice)}</span><span>qty ${esc(position.remainingQuantity)}</span><span>peak ${esc(position.peakNetProfitUsdt)}</span><span>protected ${esc(position.protectedNetProfitUsdt)}</span><span>stop ${esc(position.currentStop)}</span></div>`;
+}
+
+async function refresh() {
+  try {
+    const status = await api('/api/status');
+    $('#connection').textContent = 'ONLINE';
+    $('#connection').className = 'pill ok';
+    $('#masterHealth').textContent = status.masterHealth;
+    const gate = $('#mutationGate');
+    gate.textContent = `LIVE: ${status.mutationGate}`;
+    gate.className = 'pill ' + (status.mutationGate === 'ARMED' ? 'bad' : 'warn');
+    $('#universe').textContent = `Universe ${status.universeCount}`;
+    $('#lastScan').textContent = `last scan ${status.lastScanAt ?? '—'}`;
+    $('#lastSignal').textContent = `last signal ${status.lastSignalId ?? '—'}`;
+    const attempts = new Map((status.lastRouteAttempts || []).map(attempt => [attempt.exchange, attempt]));
+    const grid = $('#exchangeGrid');
+    grid.replaceChildren();
+    status.exchanges.forEach(exchange => grid.append(exchangeCard(exchange, attempts.get(exchange.exchange))));
+    $('#positions').innerHTML = status.positions.length ? status.positions.map(positionRow).join('') : 'Открытых позиций нет';
+    $('#serverInfo').textContent = JSON.stringify(status, null, 2);
+  } catch (error) {
+    $('#connection').textContent = error.message;
+    $('#connection').className = 'pill bad';
+  }
+}
+
+async function loadTab(tab) {
+  if (tab === 'history') {
+    try {
+      const rows = await api('/api/history?limit=100');
+      const header = '<div class="row tableHeader"><span>Время</span><span>Биржа</span><span>Сигнал</span><span>Результат</span><span>Причина</span><span>Цена</span><span>Количество</span></div>';
+      $('#historyTable').innerHTML = header + rows.map(row => `<div class="row"><span>${esc(row.received_at)}</span><b>${esc(row.exchange)}</b><span>${esc(row.signal_id)}</span><span>${esc(row.result)}</span><span>${esc(row.reason)}</span><span>${esc(row.entry_price)}</span><span>${esc(row.quantity)}</span></div>`).join('');
+    } catch {}
+  }
+  if (tab === 'logs') {
+    try {
+      const rows = await api('/api/logs?limit=200');
+      $('#logTable').innerHTML = rows.map(row => `<div class="row"><span>${esc(row.at)}</span><b>${esc(row.category)}</b><span>${esc(row.exchange)}</span><span>${esc(row.message)}</span></div>`).join('');
+    } catch {}
+  }
+  if (tab === 'settings') await loadSettings();
+}
+
+$('#credentialExchange').innerHTML = exchanges.map(exchange => `<option value="${exchange}">${exchange}</option>`).join('');
+
+function showCredentialStatus(rows) {
+  $('#credentialStatus').innerHTML = exchanges.map(exchange => `<span class="${rows[exchange] ? 'configured' : ''}">${exchange}: ${rows[exchange] ? 'настроен' : 'нет ключа'}</span>`).join('');
+}
+
+async function loadSettings(force = false) {
+  try {
+    const settings = await api('/api/settings');
+    if (!settingsLoaded || force) {
+      $('#riskUsdt').value = settings.runtime.riskUsdt;
+      $('#maxNetLossUsdt').value = settings.runtime.maxNetLossUsdt;
+      $('#universeSize').value = settings.runtime.universeSize;
+      $('#leverage').value = settings.runtime.leverage;
+      $('#maxNotionalUsdt').value = settings.runtime.maxNotionalUsdt;
+      $('#maxCostR').value = settings.runtime.maxCostR;
+      settingsLoaded = true;
+    }
+    showCredentialStatus(settings.credentials);
+  } catch (error) {
+    $('#runtimeResult').textContent = error.message;
+  }
+}
+
+$('#saveRuntime').onclick = async () => {
+  const body = {
+    riskUsdt: Number($('#riskUsdt').value),
+    maxNetLossUsdt: Number($('#maxNetLossUsdt').value),
+    universeSize: Number($('#universeSize').value),
+    leverage: Number($('#leverage').value),
+    maxNotionalUsdt: Number($('#maxNotionalUsdt').value),
+    maxCostR: Number($('#maxCostR').value)
+  };
+  try {
+    await api('/api/settings/runtime', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    $('#runtimeResult').textContent = 'Сохранено на сервере';
+    await loadSettings(true);
+  } catch (error) {
+    $('#runtimeResult').textContent = error.message;
+  }
+};
+
+$('#saveCredentials').onclick = async () => {
+  const exchange = $('#credentialExchange').value;
+  const body = { apiKey: $('#apiKey').value, apiSecret: $('#apiSecret').value, passphrase: $('#passphrase').value };
+  try {
+    const saved = await api(`/api/settings/credentials/${exchange}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    $('#apiKey').value = $('#apiSecret').value = $('#passphrase').value = '';
+    $('#credentialResult').textContent = saved.verified ? `${exchange}: ключ проверен и готов` : `${exchange}: сохранён, но не проверен — ${saved.detail}`;
+    await loadSettings();
+    await refresh();
+  } catch (error) {
+    $('#credentialResult').textContent = error.message;
+  }
+};
+
+$('#clearCredentials').onclick = async () => {
+  const exchange = $('#credentialExchange').value;
+  if (!confirm(`${exchange}: удалить сохранённый ключ?`)) return;
+  try {
+    await api(`/api/settings/credentials/${exchange}`, { method: 'DELETE' });
+    $('#credentialResult').textContent = `${exchange}: сохранённый ключ удалён`;
+    await loadSettings();
+  } catch (error) {
+    $('#credentialResult').textContent = error.message;
+  }
+};
+
+async function batch(action) {
+  const selected = [...selectedExchanges];
+  if (!selected.length) {
+    alert('Отметьте галочками нужные биржи.');
+    return;
+  }
+  if (action === 'close-all-disable' && !confirm(`Закрыть и отключить: ${selected.join(', ')}?`)) return;
+  try {
+    if (action === 'enable') {
+      await api('/api/exchanges/enable-selected', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ exchanges: selected }) });
+    } else {
+      for (const exchange of selected) await api(`/api/exchanges/${exchange}/${action}`, { method: 'POST' });
+    }
+    await refresh();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+$('#pauseSelected').onclick = () => batch('pause');
+$('#enableSelected').onclick = () => batch('enable');
+$('#closeSelected').onclick = () => batch('close-all-disable');
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js');
+refresh();
+setInterval(refresh, 5000);

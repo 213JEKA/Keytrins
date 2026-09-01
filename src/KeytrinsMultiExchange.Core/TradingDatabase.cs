@@ -66,6 +66,39 @@ public sealed class TradingDatabase
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<RouteAttempt>> GetLatestRouteAttemptsAsync(CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT r.exchange,r.signal_id,r.received_at,r.submitted_at,r.filled_at,r.result,r.reason,
+                   r.entry_price,r.quantity,r.order_id
+            FROM route_attempts r
+            INNER JOIN (SELECT exchange,MAX(id) AS id FROM route_attempts GROUP BY exchange) latest
+              ON latest.id=r.id
+            ORDER BY r.exchange;
+            """;
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var attempts = new List<RouteAttempt>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            attempts.Add(new RouteAttempt(
+                Enum.Parse<ExchangeId>(reader.GetString(0), true),
+                reader.GetString(1),
+                DateTimeOffset.Parse(reader.GetString(2), CultureInfo.InvariantCulture),
+                reader.IsDBNull(3) ? null : DateTimeOffset.Parse(reader.GetString(3), CultureInfo.InvariantCulture),
+                reader.IsDBNull(4) ? null : DateTimeOffset.Parse(reader.GetString(4), CultureInfo.InvariantCulture),
+                Enum.Parse<RouteResult>(reader.GetString(5), true),
+                reader.GetString(6),
+                reader.IsDBNull(7) ? null : Convert.ToDecimal(reader.GetValue(7), CultureInfo.InvariantCulture),
+                reader.IsDBNull(8) ? null : Convert.ToDecimal(reader.GetValue(8), CultureInfo.InvariantCulture),
+                reader.IsDBNull(9) ? null : reader.GetString(9)));
+        }
+        return attempts;
+    }
+
     public async Task<bool> TryCreateExecutionIntentAsync(ExchangeId exchange, CanonicalSignal signal,
         string clientOrderId, CancellationToken cancellationToken)
     {

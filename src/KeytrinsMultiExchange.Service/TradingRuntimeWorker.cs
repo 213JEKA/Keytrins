@@ -20,6 +20,8 @@ public sealed class TradingRuntimeWorker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await database.InitializeAsync(stoppingToken);
+        foreach (var attempt in await database.GetLatestRouteAttemptsAsync(stoppingToken))
+            state.LastRouteAttempts[attempt.Exchange] = attempt;
         await database.AppendLogAsync("RUNTIME", "SERVICE_START; master=OKX; mutation gate=" +
             (settings.Current.TradingEnabled ? "CONFIGURED" : "DISARMED"), null, null, stoppingToken);
         await RunPreflightAsync(stoppingToken);
@@ -104,8 +106,8 @@ public sealed class TradingRuntimeWorker(
             finally { semaphore.Release(); }
         });
         await Task.WhenAll(tasks);
-        // Preserve every valid StrategyCore signal, but never overlap two signal groups. Each group still fans out
-        // concurrently to all ACTIVE exchanges, exactly as required by the CanonicalSignal contract.
+        // Preserve every valid StrategyCore signal, but process signal groups serially. OKX must fill with its
+        // exchange-side stop confirmed before the active followers are routed concurrently.
         foreach (var signal in signals.OrderBy(x => x.Key).Select(x => x.Value))
             await PublishAsync(signal, cancellationToken);
         await RunPreflightAsync(cancellationToken);
@@ -154,6 +156,7 @@ public sealed class TradingRuntimeWorker(
             {
                 var attempt = new RouteAttempt(adapter.Id, signal.SignalId, DateTimeOffset.UtcNow, null, null,
                     RouteResult.Skipped, $"MAX_CONCURRENT_SIGNALS_{configured.MaxConcurrentSignals}");
+                state.LastRouteAttempts[attempt.Exchange] = attempt;
                 await database.InsertRouteAttemptAsync(attempt, cancellationToken);
                 await database.AppendLogAsync("FAN_OUT", $"Skipped:{attempt.Reason}", adapter.Id.ToString(),
                     signal.SignalId, cancellationToken);
@@ -163,6 +166,7 @@ public sealed class TradingRuntimeWorker(
         var attempts = await execution.RouteOkxLeaderAsync(signal, configured, cancellationToken);
         foreach (var attempt in attempts)
         {
+            state.LastRouteAttempts[attempt.Exchange] = attempt;
             await database.InsertRouteAttemptAsync(attempt, cancellationToken);
             await database.AppendLogAsync("FAN_OUT", $"{attempt.Result}:{attempt.Reason}", attempt.Exchange.ToString(), signal.SignalId, cancellationToken);
         }

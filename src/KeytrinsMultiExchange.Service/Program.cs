@@ -96,6 +96,7 @@ app.MapGet("/api/status", (RuntimeSnapshot state, RuntimeSettingsStore settings)
     tradingEnabled = settings.Current.TradingEnabled,
     mutationGate = settings.Current.TradingEnabled ? "ARMED" : "DISARMED",
     exchanges = state.Exchanges.Values.OrderBy(x => x.Exchange).ToArray(),
+    lastRouteAttempts = state.LastRouteAttempts.Values.OrderBy(x => x.Exchange).ToArray(),
     positions = state.Positions.Values.OrderBy(x => x.Exchange).ThenBy(x => x.Symbol).ToArray()
 }));
 app.MapGet("/api/history", async (TradingDatabase db, int? limit, CancellationToken ct) =>
@@ -227,6 +228,9 @@ static class Control
             selected.Add(id);
         }
         if (selected.Count == 0) return Results.BadRequest(new { reason = "NO_EXCHANGES_SELECTED" });
+        if (!selected.Contains(ExchangeId.Okx))
+            return Results.BadRequest(new { reason = "OKX_MASTER_REQUIRED",
+                detail = "OKX is the canonical signal source and must be selected with any follower exchange." });
 
         var checks = new List<ExchangeSnapshot>();
         foreach (var adapter in adapters.Where(x => selected.Contains(x.Id)))

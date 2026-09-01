@@ -87,6 +87,7 @@ public partial class MainWindow : Window
                 "EXECUTION_RECOVERY_NOT_READY" => "Сервер ещё не завершил восстановление заявок и позиций. Входы не включены.",
                 "FOREIGN_OKX_WRITER_ACTIVE" => "Обнаружена другая программа, которая продолжает отправлять реальные OKX-заявки. Все новые входы оставлены на паузе.",
                 "NO_EXCHANGES_SELECTED" => "Отметьте хотя бы одну биржу.",
+                "OKX_MASTER_REQUIRED" => "OKX — источник сигнала и обязательный лидер. Отметьте OKX вместе с нужными ведомыми биржами.",
                 _ => string.IsNullOrWhiteSpace(reason) ? "Сервер отклонил операцию." : reason
             };
         }
@@ -104,7 +105,10 @@ public partial class MainWindow : Window
             var selected = ExchangeGrid.ItemsSource is IEnumerable<ExchangeRow> existing
                 ? existing.Where(x => x.Selected).Select(x => x.Exchange).ToHashSet(StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            ExchangeGrid.ItemsSource = ExchangeRows(root.GetProperty("exchanges"), selected, liveEnabled);
+            var lastAttempts = root.TryGetProperty("lastRouteAttempts", out var attempts)
+                ? attempts.EnumerateArray().ToDictionary(x => Text(x, "exchange"), StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+            ExchangeGrid.ItemsSource = ExchangeRows(root.GetProperty("exchanges"), lastAttempts, selected, liveEnabled);
             PositionGrid.ItemsSource = Rows(root.GetProperty("positions"));
             MasterStatus.Text = (root.GetProperty("masterHealth").GetString() ?? "—") +
                 (liveEnabled ? " • LIVE ВКЛЮЧЁН" : " • LIVE ЗАБЛОКИРОВАН");
@@ -218,7 +222,8 @@ public partial class MainWindow : Window
         return table.DefaultView;
     }
 
-    private static ObservableCollection<ExchangeRow> ExchangeRows(JsonElement array, HashSet<string> selected, bool liveEnabled)
+    private static ObservableCollection<ExchangeRow> ExchangeRows(JsonElement array,
+        IReadOnlyDictionary<string, JsonElement> lastAttempts, HashSet<string> selected, bool liveEnabled)
     {
         var rows = new ObservableCollection<ExchangeRow>();
         foreach (var item in array.EnumerateArray())
@@ -229,11 +234,15 @@ public partial class MainWindow : Window
             var withdraw = Flag(item, "withdrawPermission");
             var keyReady = authenticated && trading && !withdraw;
             var readiness = !keyReady ? "КЛЮЧ НЕ ПРОВЕРЕН" : liveEnabled ? "LIVE ГОТОВА" : "КЛЮЧ ГОТОВ • LIVE ЗАКРЫТ";
+            lastAttempts.TryGetValue(exchange, out var lastAttempt);
             rows.Add(new ExchangeRow
             {
                 Selected = selected.Contains(exchange), Exchange = exchange, Mode = Text(item, "mode"), Readiness = readiness,
                 Public = YesNo(Flag(item, "publicConnected")), Private = YesNo(authenticated), Trade = YesNo(trading),
-                Withdraw = YesNo(withdraw), Positions = Text(item, "openPositionCount"), Detail = Text(item, "detail")
+                Withdraw = YesNo(withdraw), Positions = Text(item, "openPositionCount"),
+                LastResult = lastAttempt.ValueKind == JsonValueKind.Object ? Text(lastAttempt, "result") : "—",
+                LastReason = lastAttempt.ValueKind == JsonValueKind.Object ? Text(lastAttempt, "reason") : "—",
+                Detail = Text(item, "detail")
             });
         }
         return rows;
@@ -287,5 +296,7 @@ public sealed class ExchangeRow
     public string Trade { get; set; } = "";
     public string Withdraw { get; set; } = "";
     public string Positions { get; set; } = "";
+    public string LastResult { get; set; } = "";
+    public string LastReason { get; set; } = "";
     public string Detail { get; set; } = "";
 }
