@@ -235,9 +235,11 @@ public partial class MainWindow : Window
             var keyReady = authenticated && trading && !withdraw;
             var readiness = !keyReady ? "КЛЮЧ НЕ ПРОВЕРЕН" : liveEnabled ? "LIVE ГОТОВА" : "КЛЮЧ ГОТОВ • LIVE ЗАКРЫТ";
             lastAttempts.TryGetValue(exchange, out var lastAttempt);
+            var mode = Text(item, "mode");
             rows.Add(new ExchangeRow
             {
-                Selected = selected.Contains(exchange), Exchange = exchange, Mode = Text(item, "mode"), Readiness = readiness,
+                Selected = selected.Contains(exchange), Exchange = exchange,
+                Mode = mode == "Disabling" ? "ЗАКРЫТИЕ…" : mode, Readiness = readiness,
                 Public = YesNo(Flag(item, "publicConnected")), Private = YesNo(authenticated), Trade = YesNo(trading),
                 Withdraw = YesNo(withdraw), Positions = Text(item, "openPositionCount"),
                 LastResult = lastAttempt.ValueKind == JsonValueKind.Object ? Text(lastAttempt, "result") : "—",

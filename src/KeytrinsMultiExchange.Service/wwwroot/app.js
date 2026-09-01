@@ -59,7 +59,7 @@ function exchangeCard(exchange, lastAttempt) {
     ? selectedExchanges.add(exchange.exchange)
     : selectedExchanges.delete(exchange.exchange);
   const mode = card.querySelector('.mode');
-  mode.textContent = exchange.mode;
+  mode.textContent = exchange.mode === 'Disabling' ? 'ЗАКРЫТИЕ…' : exchange.mode;
   setPill(mode, exchange.mode);
   const metrics = [
     ['Public', exchange.publicConnected ? 'OK' : '—'],

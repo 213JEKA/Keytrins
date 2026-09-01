@@ -41,6 +41,7 @@ builder.Services.AddSingleton(sp => new ExecutionCoordinator(sp.GetRequiredServi
 builder.Services.AddSingleton(sp => new PositionManager(sp.GetRequiredService<TradingDatabase>(),
     sp.GetRequiredService<IReadOnlyList<ILiveExecutionTransport>>(),
     sp.GetRequiredService<ExchangeOperationLocks>(), sp.GetRequiredService<RuntimeSnapshot>()));
+builder.Services.AddSingleton<PendingDisableCoordinator>();
 builder.Services.AddHostedService<TradingRuntimeWorker>();
 builder.Services.AddHostedService<PositionManagementWorker>();
 
@@ -172,8 +173,9 @@ app.MapPost("/api/exchanges/enable-selected", async (ExchangeSelectionRequest re
     await Control.EnableSelectedAsync(request.Exchanges, state, settings, adapters, database, writerGuard, ct));
 app.MapPost("/api/exchanges/{exchange}/close", (string exchange) => Results.Conflict(new { reason = "NO_MANAGED_POSITION_OR_MUTATION_GATE_DISARMED", exchange }));
 app.MapPost("/api/exchanges/{exchange}/close-all-disable", async (string exchange, RuntimeSnapshot state,
-    RuntimeSettingsStore settings, PositionManager manager, CancellationToken ct) =>
-    await Control.CloseAllDisableAsync(exchange, state, settings, manager, ct));
+    RuntimeSettingsStore settings, PositionManager manager, PendingDisableCoordinator disableCoordinator,
+    CancellationToken ct) =>
+    await Control.CloseAllDisableAsync(exchange, state, settings, manager, disableCoordinator, ct));
 app.MapFallbackToFile("index.html");
 app.Run();
 
@@ -187,20 +189,23 @@ static string ResolveDataDirectory(IServiceProvider services)
 static class Control
 {
     public static async Task<IResult> CloseAllDisableAsync(string name, RuntimeSnapshot state,
-        RuntimeSettingsStore settings, PositionManager manager, CancellationToken cancellationToken)
+        RuntimeSettingsStore settings, PositionManager manager, PendingDisableCoordinator disableCoordinator,
+        CancellationToken cancellationToken)
     {
         if (!Enum.TryParse<ExchangeId>(name, true, out var id))
             return Results.NotFound(new { reason = "UNKNOWN_EXCHANGE" });
-        settings.SetExchangeMode(id, ExchangeMode.Paused);
+        settings.SetExchangeMode(id, ExchangeMode.Disabling);
         if (state.Exchanges.TryGetValue(id, out var current))
-            state.Exchanges[id] = current with { Mode = ExchangeMode.Paused, LastActivity = DateTimeOffset.UtcNow,
+            state.Exchanges[id] = current with { Mode = ExchangeMode.Disabling, LastActivity = DateTimeOffset.UtcNow,
                 Detail = "CLOSE_ALL_REQUESTED" };
         var requested = await manager.RequestCloseExchangeAsync(id, "MANUAL_CLOSE_ALL_DISABLE", cancellationToken);
-        settings.SetExchangeMode(id, ExchangeMode.Off);
-        if (state.Exchanges.TryGetValue(id, out current))
-            state.Exchanges[id] = current with { Mode = ExchangeMode.Off, LastActivity = DateTimeOffset.UtcNow,
-                Detail = $"CLOSE_ALL_DISABLE_REQUESTED:{requested}" };
-        return Results.Accepted(value: new { exchange = id, mode = ExchangeMode.Off, closeRequests = requested });
+        await disableCoordinator.CompleteConfirmedFlatAsync(cancellationToken);
+        var mode = settings.Current.Exchanges[id.ToString()];
+        if (state.Exchanges.TryGetValue(id, out current) && mode == ExchangeMode.Disabling)
+            state.Exchanges[id] = current with { Mode = mode, LastActivity = DateTimeOffset.UtcNow,
+                Detail = $"CLOSE_ALL_DISABLE_PENDING_FLAT:{requested}" };
+        return Results.Accepted(value: new { exchange = id, mode, closeRequests = requested,
+            pendingFlat = mode == ExchangeMode.Disabling });
     }
 
     public static IResult SetMode(string name, ExchangeMode mode, RuntimeSnapshot state, RuntimeSettingsStore settings)

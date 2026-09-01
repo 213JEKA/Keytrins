@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 namespace KeytrinsMultiExchange.Core;
 
 public enum ExchangeId { Okx, Bybit, KuCoinFutures, Bitget, MexcFutures, GateFutures, BingX, CoinExFutures }
-public enum ExchangeMode { Active, Paused, Off, Error, NotConfigured }
+public enum ExchangeMode { Active, Paused, Disabling, Off, Error, NotConfigured }
 public enum TradeDirection { Long, Short }
 public enum RouteResult { Filled, Skipped, Rejected, Unknown }
 public enum ExecutionCommandState
@@ -134,7 +134,7 @@ public sealed record ExchangeSnapshot(
 public sealed class RuntimeSnapshot
 {
     public DateTimeOffset StartedAt { get; } = DateTimeOffset.UtcNow;
-    public string Version { get; init; } = "1.1.5";
+    public string Version { get; init; } = "1.1.6";
     public volatile string MasterHealth = "STARTING";
     public volatile string MasterDetail = "initializing";
     public volatile string? LastSignalId;

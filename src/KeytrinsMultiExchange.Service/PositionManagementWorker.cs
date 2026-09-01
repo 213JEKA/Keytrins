@@ -6,7 +6,8 @@ public sealed class PositionManagementWorker(
     ILogger<PositionManagementWorker> logger,
     RuntimeSettingsStore settings,
     PositionManager manager,
-    ExecutionCoordinator execution) : BackgroundService
+    ExecutionCoordinator execution,
+    PendingDisableCoordinator disableCoordinator) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -16,6 +17,7 @@ public sealed class PositionManagementWorker(
             {
                 await execution.RecoverAsync(stoppingToken);
                 await manager.RunOnceAsync(settings.Current, stoppingToken);
+                await disableCoordinator.CompleteConfirmedFlatAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception exception)
