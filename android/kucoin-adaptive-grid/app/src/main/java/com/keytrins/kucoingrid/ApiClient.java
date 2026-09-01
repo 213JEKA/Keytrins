@@ -22,7 +22,28 @@ public final class ApiClient {
     }
     private static String readAll(InputStream is) throws Exception { if(is==null)return ""; BufferedReader br=new BufferedReader(new InputStreamReader(is,StandardCharsets.UTF_8)); StringBuilder sb=new StringBuilder(); String l; while((l=br.readLine())!=null)sb.append(l); return sb.toString(); }
     public ContractInfo contract(String symbol) throws Exception { JSONObject d=request("GET","/api/v1/contracts/"+URLEncoder.encode(symbol,"UTF-8"),null,false).getJSONObject("data"); return new ContractInfo(symbol,d.getDouble("tickSize"),d.getInt("lotSize"),d.getDouble("multiplier"),d.optDouble("makerFeeRate",0.0002),d.optDouble("takerFeeRate",0.0006)); }
-    public List<Candle> klines(String symbol,int seconds,int count) throws Exception { long to=System.currentTimeMillis(); long from=to-(long)seconds*1000L*count; String p="/api/v1/kline/query?symbol="+URLEncoder.encode(symbol,"UTF-8")+"&granularity="+seconds+"&from="+from+"&to="+to; JSONArray a=request("GET",p,null,false).getJSONArray("data"); List<Candle> out=new ArrayList<>(); for(int i=0;i<a.length();i++){JSONArray x=a.getJSONArray(i); out.add(new Candle(x.getLong(0),x.getDouble(1),x.getDouble(2),x.getDouble(3),x.getDouble(4),x.getDouble(5)));} out.sort(Comparator.comparingLong(z->z.t)); return out; }
+    public List<Candle> klines(String symbol,int seconds,int count) throws Exception {
+        String enc=URLEncoder.encode(symbol,"UTF-8");
+        String p="/api/v1/kline/query?symbol="+enc+"&granularity="+seconds;
+        JSONArray a=request("GET",p,null,false).getJSONArray("data");
+        if(a.length()<Math.min(count,60)){
+            long to=System.currentTimeMillis();
+            long from=to-(long)seconds*1000L*Math.max(count*4,500);
+            String p2=p+"&from="+from+"&to="+to;
+            JSONArray b=request("GET",p2,null,false).getJSONArray("data");
+            if(b.length()>a.length()) a=b;
+        }
+        List<Candle> out=new ArrayList<>();
+        for(int i=0;i<a.length();i++){
+            JSONArray x=a.getJSONArray(i);
+            if(x.length()<6) continue;
+            // KuCoin futures Kline: [time, open, high, low, close, volume, turnover]
+            out.add(new Candle(x.getLong(0),x.getDouble(1),x.getDouble(4),x.getDouble(2),x.getDouble(3),x.getDouble(5)));
+        }
+        out.sort(Comparator.comparingLong(z->z.t));
+        if(out.size()>count) return new ArrayList<>(out.subList(out.size()-count,out.size()));
+        return out;
+    }
     public void cancelAll(String symbol) throws Exception { request("DELETE","/api/v3/orders?symbol="+URLEncoder.encode(symbol,"UTF-8"),null,true); }
     public String place(String symbol,String side,double price,int size,int leverage,boolean test,boolean reduceOnly) throws Exception { JSONObject b=new JSONObject(); b.put("clientOid",UUID.randomUUID().toString().replace("-","")); b.put("symbol",symbol); b.put("marginMode","ISOLATED"); b.put("leverage",leverage); b.put("positionSide","BOTH"); b.put("side",side); b.put("type","limit"); b.put("size",size); b.put("price",fmt(price)); b.put("timeInForce","GTC"); b.put("postOnly",true); b.put("reduceOnly",reduceOnly); JSONObject r=request("POST",test?"/api/v1/orders/test":"/api/v1/orders",b.toString(),true); return r.getJSONObject("data").optString("orderId",""); }
     public int positionMode() throws Exception { return request("GET","/api/v2/position/getPositionMode",null,true).getJSONObject("data").optInt("positionMode",-1); }
