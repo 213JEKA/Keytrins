@@ -108,7 +108,9 @@ public partial class MainWindow : Window
             var lastAttempts = root.TryGetProperty("lastRouteAttempts", out var attempts)
                 ? attempts.EnumerateArray().ToDictionary(x => Text(x, "exchange"), StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
-            ExchangeGrid.ItemsSource = ExchangeRows(root.GetProperty("exchanges"), lastAttempts, selected, liveEnabled);
+            var sessionStartedAt = root.GetProperty("startedAt").GetDateTimeOffset();
+            ExchangeGrid.ItemsSource = ExchangeRows(root.GetProperty("exchanges"), lastAttempts, selected,
+                liveEnabled, sessionStartedAt);
             PositionGrid.ItemsSource = PositionRows(root.GetProperty("positions"), root.GetProperty("externalPositions"));
             MasterStatus.Text = (root.GetProperty("masterHealth").GetString() ?? "—") +
                 (liveEnabled ? " • LIVE ВКЛЮЧЁН" : " • LIVE ЗАБЛОКИРОВАН");
@@ -248,7 +250,8 @@ public partial class MainWindow : Window
     }
 
     private static ObservableCollection<ExchangeRow> ExchangeRows(JsonElement array,
-        IReadOnlyDictionary<string, JsonElement> lastAttempts, HashSet<string> selected, bool liveEnabled)
+        IReadOnlyDictionary<string, JsonElement> lastAttempts, HashSet<string> selected, bool liveEnabled,
+        DateTimeOffset sessionStartedAt)
     {
         var rows = new ObservableCollection<ExchangeRow>();
         foreach (var item in array.EnumerateArray())
@@ -260,6 +263,9 @@ public partial class MainWindow : Window
             var keyReady = authenticated && trading && !withdraw;
             var readiness = !keyReady ? "КЛЮЧ НЕ ПРОВЕРЕН" : liveEnabled ? "LIVE ГОТОВА" : "КЛЮЧ ГОТОВ • LIVE ЗАКРЫТ";
             lastAttempts.TryGetValue(exchange, out var lastAttempt);
+            var hasAttempt = lastAttempt.ValueKind == JsonValueKind.Object;
+            var historicalAttempt = hasAttempt && lastAttempt.TryGetProperty("receivedAt", out var receivedAt) &&
+                                    receivedAt.GetDateTimeOffset() < sessionStartedAt;
             var mode = Text(item, "mode");
             rows.Add(new ExchangeRow
             {
@@ -267,10 +273,14 @@ public partial class MainWindow : Window
                 Mode = mode == "Disabling" ? "ЗАКРЫТИЕ…" : mode, Readiness = readiness,
                 Public = YesNo(Flag(item, "publicConnected")), Private = YesNo(authenticated), Trade = YesNo(trading),
                 Withdraw = YesNo(withdraw), Positions = Text(item, "openPositionCount"),
-                LastResult = lastAttempt.ValueKind == JsonValueKind.Object ? Text(lastAttempt, "result") : "—",
-                LastReason = lastAttempt.ValueKind == JsonValueKind.Object
-                    ? Text(lastAttempt, "reasonExplanation") + $" [код: {Text(lastAttempt, "reason")}]"
-                    : "—",
+                LastResult = historicalAttempt ? "ОЖИДАЕТ НОВЫЙ СИГНАЛ"
+                    : hasAttempt ? Text(lastAttempt, "result") : "ОЖИДАЕТ НОВЫЙ СИГНАЛ",
+                LastReason = historicalAttempt
+                    ? "ИСТОРИЯ ДО ТЕКУЩЕГО ЗАПУСКА: " + Text(lastAttempt, "reasonExplanation") +
+                      $" [код: {Text(lastAttempt, "reason")}]"
+                    : hasAttempt
+                        ? Text(lastAttempt, "reasonExplanation") + $" [код: {Text(lastAttempt, "reason")}]"
+                        : "Новых попыток после запуска ещё не было.",
                 Detail = Text(item, "detail")
             });
         }

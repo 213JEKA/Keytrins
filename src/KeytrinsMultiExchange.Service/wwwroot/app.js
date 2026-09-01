@@ -49,7 +49,7 @@ const setPill = (element, mode) => {
   element.className = 'mode pill ' + (mode === 'Active' ? 'ok' : mode === 'Error' ? 'bad' : 'warn');
 };
 
-function exchangeCard(exchange, lastAttempt) {
+function exchangeCard(exchange, lastAttempt, sessionStartedAt) {
   const node = $('#exchangeTemplate').content.cloneNode(true);
   const card = node.querySelector('.card');
   card.querySelector('h3').textContent = exchange.exchange;
@@ -78,10 +78,15 @@ function exchangeCard(exchange, lastAttempt) {
     span.append(strong);
     metricsNode.append(span);
   });
-  card.querySelector('.lastResult').textContent = `Последний значимый результат: ${lastAttempt?.result ?? '—'}`;
-  card.querySelector('.lastReason').textContent = lastAttempt
-    ? `${lastAttempt.reasonExplanation ?? lastAttempt.reason} [код: ${lastAttempt.reason}]`
-    : 'Сигналов для этой биржи ещё не было.';
+  const historicalAttempt = lastAttempt && new Date(lastAttempt.receivedAt) < new Date(sessionStartedAt);
+  card.querySelector('.lastResult').textContent = historicalAttempt || !lastAttempt
+    ? 'Текущая сессия: ОЖИДАЕТ НОВЫЙ СИГНАЛ'
+    : `Последний результат текущей сессии: ${lastAttempt.result}`;
+  card.querySelector('.lastReason').textContent = historicalAttempt
+    ? `ИСТОРИЯ ДО ТЕКУЩЕГО ЗАПУСКА: ${lastAttempt.reasonExplanation ?? lastAttempt.reason} [код: ${lastAttempt.reason}]`
+    : lastAttempt
+      ? `${lastAttempt.reasonExplanation ?? lastAttempt.reason} [код: ${lastAttempt.reason}]`
+      : 'Новых попыток после запуска ещё не было.';
   card.querySelector('.detail').textContent = `Проверка подключения: ${exchange.detail}`;
   return node;
 }
@@ -109,7 +114,7 @@ async function refresh() {
     const attempts = new Map((status.lastRouteAttempts || []).map(attempt => [attempt.exchange, attempt]));
     const grid = $('#exchangeGrid');
     grid.replaceChildren();
-    status.exchanges.forEach(exchange => grid.append(exchangeCard(exchange, attempts.get(exchange.exchange))));
+    status.exchanges.forEach(exchange => grid.append(exchangeCard(exchange, attempts.get(exchange.exchange), status.startedAt)));
     $('#positions').innerHTML = status.positions.length ? status.positions.map(positionRow).join('') : 'Открытых позиций терминала нет';
     $('#externalPositions').innerHTML = status.externalPositions.length
       ? status.externalPositions.map(externalPositionRow).join('')
