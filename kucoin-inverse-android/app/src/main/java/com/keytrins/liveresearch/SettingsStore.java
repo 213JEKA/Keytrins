@@ -14,7 +14,7 @@ public final class SettingsStore {
     }
 
     public static final class Snapshot {
-        public String apiKey, apiSecret, apiPassphrase;
+        public String apiKey, apiSecret, apiPassphrase, apiKeyVersion;
         public boolean testnet, live;
         public double riskUsdt, minTurnoverUsdt, maxNotionalUsdt, maxCostR, defaultTakerFee;
         public int universeSize, leverage, minAgeDays;
@@ -27,7 +27,9 @@ public final class SettingsStore {
         s.apiKey = vault.get("apiKey");
         s.apiSecret = vault.get("apiSecret");
         s.apiPassphrase = vault.get("apiPassphrase");
-        s.testnet = p.getBoolean("testnet", false);
+        s.apiKeyVersion = vault.get("apiKeyVersion");
+        if (s.apiKeyVersion == null || s.apiKeyVersion.trim().isEmpty()) s.apiKeyVersion = "3";
+        s.testnet = false;
         s.live = p.getBoolean("live", false);
         s.riskUsdt = d("riskUsdt", 3.0);
         s.universeSize = i("universeSize", 30);
@@ -36,7 +38,7 @@ public final class SettingsStore {
         s.leverage = i("leverage", 5);
         s.maxNotionalUsdt = d("maxNotionalUsdt", 1000.0);
         s.maxCostR = d("maxCostR", 0.25);
-        s.defaultTakerFee = d("defaultTakerFee", 0.00050);
+        s.defaultTakerFee = d("defaultTakerFee", 0.00060);
         s.adxMin = d("adxMin", 22.0);
         s.h1EmaFast = i("h1EmaFast", 50);
         s.h1EmaSlow = i("h1EmaSlow", 200);
@@ -56,19 +58,21 @@ public final class SettingsStore {
         return s;
     }
 
-    public void saveCredentials(String key, String secret, String passphrase) {
+    public void saveCredentials(String key, String secret, String passphrase, String keyVersion) {
         vault.put("apiKey", key == null ? "" : key.trim());
         vault.put("apiSecret", secret == null ? "" : secret.trim());
         vault.put("apiPassphrase", passphrase == null ? "" : passphrase.trim());
+        String v = keyVersion == null ? "" : keyVersion.trim();
+        vault.put("apiKeyVersion", v.isEmpty() ? "3" : v);
     }
 
-    public void saveConnection(boolean demo) { p.edit().putBoolean("testnet", demo).apply(); }
+    public void saveConnection(boolean demo) { p.edit().putBoolean("testnet", false).apply(); }
     public void saveLive(boolean live) { p.edit().putBoolean("live", live).apply(); }
     public void saveStrategy(double risk, int universe) {
         p.edit().putString("riskUsdt", Double.toString(risk)).putInt("universeSize", universe).apply();
     }
     public void saveBasic(boolean demo, boolean live, double risk, int universe) {
-        saveConnection(demo); saveLive(live); saveStrategy(risk, universe);
+        saveConnection(false); saveLive(live); saveStrategy(risk, universe);
     }
 
     public double baselineBalance() {
