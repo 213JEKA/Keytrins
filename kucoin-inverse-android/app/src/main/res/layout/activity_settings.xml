@@ -14,7 +14,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Настройки OKX Inverse"
+            android:text="Настройки KuCoin Inverse"
             android:textColor="@color/text"
             android:textSize="25sp"
             android:textStyle="bold" />
@@ -80,7 +80,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="OKX: One-Way / net_mode • Cross • 5x"
+                android:text="KuCoin Futures: One-Way • Cross • 5x"
                 android:textColor="@color/muted"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -95,7 +95,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="OKX Inverse • защита прибыли"
+                android:text="KuCoin Inverse • защита прибыли"
                 android:textColor="@color/text"
                 android:textSize="18sp"
                 android:textStyle="bold" />
@@ -104,7 +104,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Входная логика OKX Inverse сохранена: фактическое направление сделки противоположно исходному сигналу.\n\nProfit-lock: шаг $1 / отставание $1. Peak +$1 → BE + издержки • +$2 → защита около +$1 • +$3 → около +$2 • дальше без лимита. Фиксированного TP нет.\n\nКомиссии, spread и tick-buffer входят в расчёт защищённого результата. Если серверный SL не успел обновиться и цена пересекла защищённый уровень, остаток позиции закрывается reduce-only market catch-up.\n\nЗащитный SL двигается только в сторону прибыли и никогда не ослабляется. Peak и Protected сохраняются в SQLite между перезапусками."
+                android:text="Входная логика скопирована из последнего OKX Inverse без изменений: фактическое направление сделки противоположно исходному сигналу.\n\nProfit-lock: шаг $1 / отставание $1. Peak +$1 → BE + издержки • +$2 → защита около +$1 • +$3 → около +$2 • дальше без лимита. Фиксированного TP нет.\n\nКомиссии, spread и tick-buffer входят в расчёт защищённого результата. Если биржевой SL не успел обновиться и цена пересекла защищённый уровень, остаток позиции закрывается reduce-only market catch-up.\n\nЗащитный SL двигается только в сторону прибыли и никогда не ослабляется. Peak и Protected сохраняются в SQLite между перезапусками."
                 android:textColor="@color/muted"
                 android:textSize="13sp" />
         </LinearLayout>
@@ -119,7 +119,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="OKX API"
+                android:text="KuCoin Futures API"
                 android:textColor="@color/text"
                 android:textSize="18sp"
                 android:textStyle="bold" />
@@ -156,19 +156,22 @@
                 android:textColor="@color/text"
                 android:textColorHint="@color/muted" />
 
-            <Switch
-                android:id="@+id/testnetSwitch"
+            <EditText
+                android:id="@+id/apiKeyVersion"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="OKX Demo / simulated trading"
-                android:textColor="@color/text" />
+                android:hint="API key version (обычно 3)"
+                android:inputType="number"
+                android:singleLine="true"
+                android:textColor="@color/text"
+                android:textColorHint="@color/muted" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="Права API: Read + Trade. Withdraw не включать. Key, secret и passphrase хранятся локально в Android Keystore."
+                android:layout_marginTop="8dp"
+                android:text="Права API: General + Futures Trading. Withdraw не включать. Key, secret, passphrase и версия ключа хранятся локально через Android Keystore. Используется production KuCoin Futures API."
                 android:textColor="@color/muted"
                 android:textSize="12sp" />
         </LinearLayout>
