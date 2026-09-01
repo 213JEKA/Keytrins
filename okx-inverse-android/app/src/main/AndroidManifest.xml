@@ -8,7 +8,7 @@
     <application
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
-        android:label="Live Research"
+        android:label="OKX Inverse"
         android:theme="@style/AppTheme">
         <activity
             android:name=".SettingsActivity"
