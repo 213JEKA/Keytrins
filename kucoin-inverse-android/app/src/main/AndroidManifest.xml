@@ -8,7 +8,7 @@
     <application
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
-        android:label="OKX Inverse"
+        android:label="KuCoin Inverse"
         android:theme="@style/AppTheme">
         <activity
             android:name=".SettingsActivity"
