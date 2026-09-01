@@ -72,7 +72,10 @@ public sealed class TradingDatabase
             SELECT r.exchange,r.signal_id,r.received_at,r.submitted_at,r.filled_at,r.result,r.reason,
                    r.entry_price,r.quantity,r.order_id
             FROM route_attempts r
-            INNER JOIN (SELECT exchange,MAX(id) AS id FROM route_attempts GROUP BY exchange) latest
+            INNER JOIN (
+              SELECT exchange,COALESCE(MAX(CASE WHEN result <> 'SKIPPED' THEN id END),MAX(id)) AS id
+              FROM route_attempts GROUP BY exchange
+            ) latest
               ON latest.id=r.id
             ORDER BY r.exchange;
             """;

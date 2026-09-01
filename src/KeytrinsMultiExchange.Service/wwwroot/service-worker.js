@@ -1,4 +1,4 @@
-const CACHE = 'keytrins-v7';
+const CACHE = 'keytrins-v8';
 const ASSETS = ['/', '/index.html', '/styles.css', '/settings.css', '/app.js', '/manifest.webmanifest'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS))));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys =>

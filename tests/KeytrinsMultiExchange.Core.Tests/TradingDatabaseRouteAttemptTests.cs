@@ -9,20 +9,24 @@ public sealed class TradingDatabaseRouteAttemptTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), $"keytrins-db-{Guid.NewGuid():N}");
 
     [Fact]
-    public async Task Restores_only_latest_route_attempt_for_each_exchange()
+    public async Task Restores_latest_meaningful_route_attempt_for_each_exchange()
     {
         var database = new TradingDatabase(_directory);
         await database.InitializeAsync(default);
         var first = Signal("first");
         var second = Signal("second");
+        var third = Signal("third");
         Assert.True(await database.InsertSignalOnceAsync(first, default));
         Assert.True(await database.InsertSignalOnceAsync(second, default));
+        Assert.True(await database.InsertSignalOnceAsync(third, default));
         await database.InsertRouteAttemptAsync(new RouteAttempt(ExchangeId.Okx, first.SignalId,
             DateTimeOffset.UtcNow.AddMinutes(-1), null, null, RouteResult.Rejected, "OLD_REASON"), default);
         await database.InsertRouteAttemptAsync(new RouteAttempt(ExchangeId.Okx, second.SignalId,
             DateTimeOffset.UtcNow, null, null, RouteResult.Rejected, "EXACT_OKX_REASON"), default);
         await database.InsertRouteAttemptAsync(new RouteAttempt(ExchangeId.Bybit, second.SignalId,
             DateTimeOffset.UtcNow, null, null, RouteResult.Skipped, "FOLLOWER_REASON"), default);
+        await database.InsertRouteAttemptAsync(new RouteAttempt(ExchangeId.Okx, third.SignalId,
+            DateTimeOffset.UtcNow.AddMinutes(1), null, null, RouteResult.Skipped, "EXCHANGE_PAUSED"), default);
 
         var restored = await database.GetLatestRouteAttemptsAsync(default);
 

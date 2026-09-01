@@ -21,7 +21,7 @@ public sealed class TradingRuntimeWorker(
     {
         await database.InitializeAsync(stoppingToken);
         foreach (var attempt in await database.GetLatestRouteAttemptsAsync(stoppingToken))
-            state.LastRouteAttempts[attempt.Exchange] = attempt;
+            RememberMeaningfulAttempt(attempt);
         await database.AppendLogAsync("RUNTIME", "SERVICE_START; master=OKX; mutation gate=" +
             (settings.Current.TradingEnabled ? "CONFIGURED" : "DISARMED"), null, null, stoppingToken);
         await RunPreflightAsync(stoppingToken);
@@ -156,7 +156,7 @@ public sealed class TradingRuntimeWorker(
             {
                 var attempt = new RouteAttempt(adapter.Id, signal.SignalId, DateTimeOffset.UtcNow, null, null,
                     RouteResult.Skipped, $"MAX_CONCURRENT_SIGNALS_{configured.MaxConcurrentSignals}");
-                state.LastRouteAttempts[attempt.Exchange] = attempt;
+                RememberMeaningfulAttempt(attempt);
                 await database.InsertRouteAttemptAsync(attempt, cancellationToken);
                 await database.AppendLogAsync("FAN_OUT", $"Skipped:{attempt.Reason}", adapter.Id.ToString(),
                     signal.SignalId, cancellationToken);
@@ -166,10 +166,16 @@ public sealed class TradingRuntimeWorker(
         var attempts = await execution.RouteOkxLeaderAsync(signal, configured, cancellationToken);
         foreach (var attempt in attempts)
         {
-            state.LastRouteAttempts[attempt.Exchange] = attempt;
+            RememberMeaningfulAttempt(attempt);
             await database.InsertRouteAttemptAsync(attempt, cancellationToken);
             await database.AppendLogAsync("FAN_OUT", $"{attempt.Result}:{attempt.Reason}", attempt.Exchange.ToString(), signal.SignalId, cancellationToken);
         }
+    }
+
+    private void RememberMeaningfulAttempt(RouteAttempt attempt)
+    {
+        if (attempt.Result != RouteResult.Skipped || !state.LastRouteAttempts.ContainsKey(attempt.Exchange))
+            state.LastRouteAttempts[attempt.Exchange] = attempt;
     }
 
     private static DateTimeOffset NextScanAt(DateTimeOffset now)
