@@ -12,42 +12,173 @@ import java.util.*;
 public final class ApiClient {
     public static final String BASE = "https://api-futures.kucoin.com";
     private final String apiKey, secret, passphrase;
-    public ApiClient(String apiKey, String secret, String passphrase){this.apiKey=apiKey;this.secret=secret;this.passphrase=passphrase;}
-    private String hmac(String s) throws Exception { Mac m=Mac.getInstance("HmacSHA256"); m.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8),"HmacSHA256")); return Base64.encodeToString(m.doFinal(s.getBytes(StandardCharsets.UTF_8)),Base64.NO_WRAP); }
-    private JSONObject request(String method,String path,String body,boolean auth) throws Exception {
-        long ts=System.currentTimeMillis(); URL u=new URL(BASE+path); HttpURLConnection c=(HttpURLConnection)u.openConnection(); c.setRequestMethod(method); c.setConnectTimeout(10000); c.setReadTimeout(12000); c.setRequestProperty("Content-Type","application/json");
-        if(auth){ String pre=ts+method+path+(body==null?"":body); c.setRequestProperty("KC-API-KEY",apiKey); c.setRequestProperty("KC-API-SIGN",hmac(pre)); c.setRequestProperty("KC-API-TIMESTAMP",String.valueOf(ts)); c.setRequestProperty("KC-API-PASSPHRASE",hmac(passphrase)); c.setRequestProperty("KC-API-KEY-VERSION","2"); }
-        if(body!=null && !body.isEmpty()){c.setDoOutput(true); try(OutputStream os=c.getOutputStream()){os.write(body.getBytes(StandardCharsets.UTF_8));}}
-        int code=c.getResponseCode(); InputStream is=(code>=200&&code<300)?c.getInputStream():c.getErrorStream(); String txt=readAll(is); if(txt==null||txt.isEmpty()) txt="{}"; JSONObject o=new JSONObject(txt); if(code<200||code>=300 || !"200000".equals(o.optString("code"))) throw new IOException("HTTP "+code+" "+txt); return o;
+
+    public ApiClient(String apiKey, String secret, String passphrase) {
+        this.apiKey = apiKey; this.secret = secret; this.passphrase = passphrase;
     }
-    private static String readAll(InputStream is) throws Exception { if(is==null)return ""; BufferedReader br=new BufferedReader(new InputStreamReader(is,StandardCharsets.UTF_8)); StringBuilder sb=new StringBuilder(); String l; while((l=br.readLine())!=null)sb.append(l); return sb.toString(); }
-    public ContractInfo contract(String symbol) throws Exception { JSONObject d=request("GET","/api/v1/contracts/"+URLEncoder.encode(symbol,"UTF-8"),null,false).getJSONObject("data"); return new ContractInfo(symbol,d.getDouble("tickSize"),d.getInt("lotSize"),d.getDouble("multiplier"),d.optDouble("makerFeeRate",0.0002),d.optDouble("takerFeeRate",0.0006)); }
-    public List<Candle> klines(String symbol,int seconds,int count) throws Exception {
-        String enc=URLEncoder.encode(symbol,"UTF-8");
-        String p="/api/v1/kline/query?symbol="+enc+"&granularity="+seconds;
-        JSONArray a=request("GET",p,null,false).getJSONArray("data");
-        if(a.length()<Math.min(count,60)){
-            long to=System.currentTimeMillis();
-            long from=to-(long)seconds*1000L*Math.max(count*4,500);
-            String p2=p+"&from="+from+"&to="+to;
-            JSONArray b=request("GET",p2,null,false).getJSONArray("data");
-            if(b.length()>a.length()) a=b;
+
+    private String hmac(String s) throws Exception {
+        Mac m = Mac.getInstance("HmacSHA256");
+        m.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        return Base64.encodeToString(m.doFinal(s.getBytes(StandardCharsets.UTF_8)), Base64.NO_WRAP);
+    }
+
+    private JSONObject request(String method, String path, String body, boolean auth) throws Exception {
+        long ts = System.currentTimeMillis();
+        HttpURLConnection c = (HttpURLConnection)new URL(BASE + path).openConnection();
+        c.setRequestMethod(method); c.setConnectTimeout(10000); c.setReadTimeout(15000);
+        c.setRequestProperty("Content-Type", "application/json");
+        if (auth) {
+            String pre = ts + method + path + (body == null ? "" : body);
+            c.setRequestProperty("KC-API-KEY", apiKey);
+            c.setRequestProperty("KC-API-SIGN", hmac(pre));
+            c.setRequestProperty("KC-API-TIMESTAMP", String.valueOf(ts));
+            c.setRequestProperty("KC-API-PASSPHRASE", hmac(passphrase));
+            c.setRequestProperty("KC-API-KEY-VERSION", "2");
         }
-        List<Candle> out=new ArrayList<>();
-        for(int i=0;i<a.length();i++){
-            JSONArray x=a.getJSONArray(i);
-            if(x.length()<6) continue;
-            // KuCoin futures Kline: [time, open, high, low, close, volume, turnover]
-            out.add(new Candle(x.getLong(0),x.getDouble(1),x.getDouble(4),x.getDouble(2),x.getDouble(3),x.getDouble(5)));
+        if (body != null && !body.isEmpty()) {
+            c.setDoOutput(true);
+            try (OutputStream os = c.getOutputStream()) { os.write(body.getBytes(StandardCharsets.UTF_8)); }
         }
-        out.sort(Comparator.comparingLong(z->z.t));
-        if(out.size()>count) return new ArrayList<>(out.subList(out.size()-count,out.size()));
+        int code = c.getResponseCode();
+        InputStream is = (code >= 200 && code < 300) ? c.getInputStream() : c.getErrorStream();
+        String txt = readAll(is); if (txt == null || txt.isEmpty()) txt = "{}";
+        JSONObject o = new JSONObject(txt);
+        if (code < 200 || code >= 300 || !"200000".equals(o.optString("code")))
+            throw new IOException("HTTP " + code + " " + txt);
+        return o;
+    }
+
+    private static String readAll(InputStream is) throws Exception {
+        if (is == null) return "";
+        BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
+        StringBuilder sb = new StringBuilder(); String l;
+        while ((l = br.readLine()) != null) sb.append(l);
+        return sb.toString();
+    }
+
+    public ContractInfo contract(String symbol) throws Exception {
+        JSONObject d = request("GET", "/api/v1/contracts/" + enc(symbol), null, false).getJSONObject("data");
+        return new ContractInfo(symbol, dnum(d,"tickSize"), d.optInt("lotSize",1), dnum(d,"multiplier"),
+                d.optDouble("makerFeeRate",0.0002), d.optDouble("takerFeeRate",0.0006));
+    }
+
+    public List<Candle> klines(String symbol, int seconds, int count) throws Exception {
+        String p = "/api/v1/kline/query?symbol=" + enc(symbol) + "&granularity=" + seconds;
+        JSONArray a = request("GET", p, null, false).getJSONArray("data");
+        List<Candle> out = parseCandles(a);
+        if (out.size() > count) out = new ArrayList<>(out.subList(out.size()-count, out.size()));
+        if (out.size() < Math.min(60,count)) {
+            long to = System.currentTimeMillis(); long from = to - (long)seconds * 1000L * Math.max(count*3, 360);
+            p = "/api/v1/kline/query?symbol=" + enc(symbol) + "&granularity=" + seconds + "&from=" + from + "&to=" + to;
+            out = parseCandles(request("GET", p, null, false).getJSONArray("data"));
+            if (out.size() > count) out = new ArrayList<>(out.subList(out.size()-count, out.size()));
+        }
         return out;
     }
-    public void cancelAll(String symbol) throws Exception { request("DELETE","/api/v3/orders?symbol="+URLEncoder.encode(symbol,"UTF-8"),null,true); }
-    public String place(String symbol,String side,double price,int size,int leverage,boolean test,boolean reduceOnly) throws Exception { JSONObject b=new JSONObject(); b.put("clientOid",UUID.randomUUID().toString().replace("-","")); b.put("symbol",symbol); b.put("marginMode","ISOLATED"); b.put("leverage",leverage); b.put("positionSide","BOTH"); b.put("side",side); b.put("type","limit"); b.put("size",size); b.put("price",fmt(price)); b.put("timeInForce","GTC"); b.put("postOnly",true); b.put("reduceOnly",reduceOnly); JSONObject r=request("POST",test?"/api/v1/orders/test":"/api/v1/orders",b.toString(),true); return r.getJSONObject("data").optString("orderId",""); }
-    public int positionMode() throws Exception { return request("GET","/api/v2/position/getPositionMode",null,true).getJSONObject("data").optInt("positionMode",-1); }
-    private static String fmt(double v){return String.format(Locale.US,"%.12f",v).replaceAll("0+$","").replaceAll("\\.$","");}
-    public static final class ContractInfo{public final String symbol; public final double tick,multiplier,makerFee,takerFee; public final int lot; ContractInfo(String s,double t,int l,double m,double mf,double tf){symbol=s;tick=t;lot=l;multiplier=m;makerFee=mf;takerFee=tf;}}
-    public static final class Candle{public final long t; public final double o,c,h,l,v; Candle(long t,double o,double c,double h,double l,double v){this.t=t;this.o=o;this.c=c;this.h=h;this.l=l;this.v=v;}}
+
+    private static List<Candle> parseCandles(JSONArray a) throws Exception {
+        List<Candle> out = new ArrayList<>();
+        for (int i=0;i<a.length();i++) {
+            JSONArray x=a.getJSONArray(i);
+            out.add(new Candle(x.getLong(0), x.getDouble(1), x.getDouble(4), x.getDouble(2), x.getDouble(3), x.getDouble(5)));
+        }
+        out.sort(Comparator.comparingLong(z -> z.t)); return out;
+    }
+
+    public int positionMode() throws Exception {
+        return request("GET", "/api/v2/position/getPositionMode", null, true).getJSONObject("data").optInt("positionMode", -1);
+    }
+
+    public Position position(String symbol) throws Exception {
+        JSONObject r = request("GET", "/api/v2/position?symbol=" + enc(symbol), null, true);
+        Object data = r.opt("data");
+        JSONObject d = null;
+        if (data instanceof JSONArray) {
+            JSONArray a=(JSONArray)data;
+            for(int i=0;i<a.length();i++) { JSONObject z=a.getJSONObject(i); if(symbol.equals(z.optString("symbol"))){d=z;break;} }
+            if(d==null && a.length()>0) d=a.getJSONObject(0);
+        } else if (data instanceof JSONObject) d=(JSONObject)data;
+        if(d==null) return Position.flat(symbol);
+        int qty = (int)Math.round(dnum(d,"currentQty"));
+        String ps=d.optString("positionSide",""); if("SHORT".equalsIgnoreCase(ps)&&qty>0)qty=-qty; else if("LONG".equalsIgnoreCase(ps)&&qty<0)qty=Math.abs(qty);
+        return new Position(symbol, qty, dnum(d,"avgEntryPrice"), dnum(d,"markPrice"), dnum(d,"unrealisedPnl"),
+                dnum(d,"realisedPnl"), dnum(d,"liquidationPrice"), d.optBoolean("isOpen", qty!=0));
+    }
+
+    public Account account() throws Exception {
+        JSONObject d = request("GET", "/api/v1/account-overview?currency=USDT", null, true).getJSONObject("data");
+        return new Account(dnum(d,"accountEquity"), dnum(d,"availableBalance"), dnum(d,"unrealisedPNL"), dnum(d,"riskRatio"));
+    }
+
+    public List<Order> openOrders(String symbol) throws Exception { return orderList(symbol,"active",0); }
+    public List<Order> doneOrders(String symbol) throws Exception { return orderList(symbol,"done",24L*60L*60L*1000L); }
+
+    private List<Order> orderList(String symbol,String status,long lookbackMs) throws Exception {
+        StringBuilder p=new StringBuilder("/api/v1/orders?status=").append(status).append("&symbol=").append(enc(symbol)).append("&currentPage=1&pageSize=100");
+        if(lookbackMs>0){long end=System.currentTimeMillis(),start=end-lookbackMs;p.append("&startAt=").append(start).append("&endAt=").append(end);}
+        JSONObject d=request("GET",p.toString(),null,true).getJSONObject("data");
+        JSONArray a=d.optJSONArray("items"); List<Order> out=new ArrayList<>(); if(a==null)return out;
+        for(int i=0;i<a.length();i++) out.add(parseOrder(a.getJSONObject(i)));
+        return out;
+    }
+
+    private static Order parseOrder(JSONObject z){
+        return new Order(z.optString("id"),z.optString("clientOid"),z.optString("side"),z.optString("type"),
+                dnum(z,"price"),z.optInt("size",0),z.optInt("filledSize",z.optInt("dealSize",0)),
+                dnum(z,"avgDealPrice"),z.optBoolean("reduceOnly",false),z.optBoolean("isActive",false),
+                z.optString("status"),z.optLong("createdAt",0));
+    }
+
+    public void cancelOrder(String orderId) throws Exception {
+        if(orderId==null||orderId.isEmpty()) return;
+        request("DELETE", "/api/v1/orders/" + enc(orderId), null, true);
+    }
+
+    public String placeLimit(String symbol,String side,double price,int size,int leverage,boolean test,boolean reduceOnly,String clientOid) throws Exception {
+        JSONObject b=baseOrder(symbol,side,size,leverage,reduceOnly,clientOid);
+        b.put("type","limit"); b.put("price",fmt(price)); b.put("timeInForce","GTC"); b.put("postOnly",true);
+        JSONObject r=request("POST",test?"/api/v1/orders/test":"/api/v1/orders",b.toString(),true);
+        return r.getJSONObject("data").optString("orderId","");
+    }
+
+    public String placeMarket(String symbol,String side,int size,int leverage,boolean test,boolean reduceOnly,String clientOid) throws Exception {
+        JSONObject b=baseOrder(symbol,side,size,leverage,reduceOnly,clientOid);
+        b.put("type","market");
+        JSONObject r=request("POST",test?"/api/v1/orders/test":"/api/v1/orders",b.toString(),true);
+        return r.getJSONObject("data").optString("orderId","");
+    }
+
+    private static JSONObject baseOrder(String symbol,String side,int size,int leverage,boolean reduceOnly,String clientOid) throws Exception {
+        JSONObject b=new JSONObject(); b.put("clientOid",clientOid); b.put("symbol",symbol); b.put("marginMode","ISOLATED");
+        b.put("leverage",leverage); b.put("positionSide","BOTH"); b.put("side",side); b.put("size",size);
+        b.put("reduceOnly",reduceOnly); b.put("remark","KAG2"); return b;
+    }
+
+    private static String enc(String s) throws Exception { return URLEncoder.encode(s,"UTF-8"); }
+    private static String fmt(double v){ return String.format(Locale.US,"%.12f",v).replaceAll("0+$","").replaceAll("\\.$",""); }
+    private static double dnum(JSONObject o,String k){ try{Object v=o.opt(k); if(v==null||v==JSONObject.NULL)return 0; if(v instanceof Number)return ((Number)v).doubleValue(); return Double.parseDouble(String.valueOf(v));}catch(Exception e){return 0;} }
+
+    public static final class ContractInfo {
+        public final String symbol; public final double tick,multiplier,makerFee,takerFee; public final int lot;
+        ContractInfo(String s,double t,int l,double m,double mf,double tf){symbol=s;tick=t;lot=Math.max(1,l);multiplier=m;makerFee=mf;takerFee=tf;}
+    }
+    public static final class Candle {
+        public final long t; public final double o,c,h,l,v;
+        Candle(long t,double o,double c,double h,double l,double v){this.t=t;this.o=o;this.c=c;this.h=h;this.l=l;this.v=v;}
+    }
+    public static final class Order {
+        public final String id,clientOid,side,type,status; public final double price,avgDealPrice; public final int size,filledSize; public final boolean reduceOnly,active; public final long createdAt;
+        Order(String id,String co,String side,String type,double price,int size,int filled,double avg,boolean ro,boolean active,String status,long createdAt){this.id=id;this.clientOid=co;this.side=side;this.type=type;this.price=price;this.size=size;this.filledSize=filled;this.avgDealPrice=avg;this.reduceOnly=ro;this.active=active;this.status=status;this.createdAt=createdAt;}
+        public int remaining(){return Math.max(0,size-filledSize);}
+    }
+    public static final class Position {
+        public final String symbol; public final int qty; public final double avgEntry,mark,unrealisedPnl,realisedPnl,liquidation; public final boolean open;
+        Position(String s,int q,double a,double m,double u,double r,double l,boolean o){symbol=s;qty=q;avgEntry=a;mark=m;unrealisedPnl=u;realisedPnl=r;liquidation=l;open=o;}
+        static Position flat(String s){return new Position(s,0,0,0,0,0,0,false);}
+    }
+    public static final class Account {
+        public final double equity,available,unrealised,riskRatio;
+        Account(double e,double a,double u,double r){equity=e;available=a;unrealised=u;riskRatio=r;}
+    }
 }
