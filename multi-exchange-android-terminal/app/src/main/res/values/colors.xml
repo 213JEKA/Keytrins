@@ -1,0 +1,4 @@
+<resources>
+    <color name="terminal_background">#050A12</color>
+    <color name="terminal_status">#07111F</color>
+</resources>

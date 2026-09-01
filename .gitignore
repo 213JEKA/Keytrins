@@ -1,0 +1,14 @@
+artifacts/
+**/bin/
+**/obj/
+*.user
+*.suo
+.vs/
+data/
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.env
+*.token
+*.crt
