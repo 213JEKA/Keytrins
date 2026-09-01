@@ -234,7 +234,8 @@ public sealed class OkxLiveExecutionTransport(
         var body = await response.Content.ReadAsStringAsync(cancellationToken); var document = JsonDocument.Parse(body);
         var code = Text(document.RootElement, "code");
         if (response.IsSuccessStatusCode && code == "0") return document;
-        document.Dispose(); throw new ExchangeApiException("OKX_" + code);
+        var error = ReadError(document.RootElement);
+        document.Dispose(); throw error;
     }
 
     private async Task<JsonDocument> PrivateGetAsync(string path, CancellationToken cancellationToken)
@@ -245,7 +246,8 @@ public sealed class OkxLiveExecutionTransport(
         var body = await response.Content.ReadAsStringAsync(cancellationToken); var document = JsonDocument.Parse(body);
         var code = Text(document.RootElement, "code");
         if (response.IsSuccessStatusCode && code == "0") return document;
-        document.Dispose(); throw new ExchangeApiException("OKX_" + code);
+        var error = ReadError(document.RootElement);
+        document.Dispose(); throw error;
     }
 
     private async Task<JsonDocument> PrivatePostAsync(string path, string body, bool ambiguousOnFailure,
@@ -265,8 +267,25 @@ public sealed class OkxLiveExecutionTransport(
                 throw new AmbiguousMutationException("OKX_HTTP_5XX");
             var document = JsonDocument.Parse(responseBody); var code = Text(document.RootElement, "code");
             if (response.IsSuccessStatusCode && code == "0") return document;
-            document.Dispose(); throw new ExchangeApiException("OKX_" + code);
+            var error = ReadError(document.RootElement);
+            document.Dispose(); throw error;
         }
+    }
+
+    private static ExchangeApiException ReadError(JsonElement root)
+    {
+        var code = Text(root, "code");
+        var detail = Text(root, "msg");
+        if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array && data.GetArrayLength() > 0)
+        {
+            var item = data[0];
+            var subCode = Text(item, "sCode");
+            var subDetail = Text(item, "sMsg");
+            if (!string.IsNullOrWhiteSpace(subCode) && subCode != "0")
+                return new ExchangeApiException("OKX_" + subCode,
+                    string.IsNullOrWhiteSpace(subDetail) ? detail : subDetail);
+        }
+        return new ExchangeApiException("OKX_" + code, detail);
     }
 
     private HttpRequestMessage Signed(HttpMethod method, string path, string body, string timestamp)

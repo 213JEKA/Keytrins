@@ -134,7 +134,7 @@ public sealed record ExchangeSnapshot(
 public sealed class RuntimeSnapshot
 {
     public DateTimeOffset StartedAt { get; } = DateTimeOffset.UtcNow;
-    public string Version { get; init; } = "1.1.1";
+    public string Version { get; init; } = "1.1.2";
     public volatile string MasterHealth = "STARTING";
     public volatile string MasterDetail = "initializing";
     public volatile string? LastSignalId;

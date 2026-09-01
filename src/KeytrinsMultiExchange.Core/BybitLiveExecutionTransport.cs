@@ -23,7 +23,10 @@ public sealed class BybitLiveExecutionTransport(HttpClient http, Func<ExchangeId
         if (positions.GetArrayLength() == 0 || positions.EnumerateArray().Any(x => Integer(x, "positionIdx") != 0))
             throw new ExecutionRejectedException("ACCOUNT_MODE");
 
-        using var instrumentDocument = await PublicGetAsync("/v5/market/instruments-info?category=linear&symbol=" + Escape(symbol), cancellationToken);
+        // Public listings include contracts that may not be enabled for this particular account.
+        // The account endpoint is read-only and returns only instruments available to the authenticated user.
+        using var instrumentDocument = await PrivateGetAsync("/v5/account/instruments-info",
+            $"category=linear&symbol={Escape(symbol)}", cancellationToken);
         var instruments = instrumentDocument.RootElement.GetProperty("result").GetProperty("list");
         if (instruments.GetArrayLength() == 0) throw new ExecutionRejectedException("SYMBOL_NOT_AVAILABLE");
         var instrument = instruments[0];
@@ -164,7 +167,8 @@ public sealed class BybitLiveExecutionTransport(HttpClient http, Func<ExchangeId
         var body = await response.Content.ReadAsStringAsync(cancellationToken); var document = JsonDocument.Parse(body);
         var code = Integer(document.RootElement, "retCode");
         if (response.IsSuccessStatusCode && code == 0) return document;
-        document.Dispose(); throw new ExchangeApiException("BYBIT_" + code);
+        var detail = Text(document.RootElement, "retMsg");
+        document.Dispose(); throw new ExchangeApiException("BYBIT_" + code, detail);
     }
 
     private async Task<JsonDocument> PrivateGetAsync(string path, string query, CancellationToken cancellationToken)
@@ -204,7 +208,8 @@ public sealed class BybitLiveExecutionTransport(HttpClient http, Func<ExchangeId
         if (ambiguousOnFailure && (int)response.StatusCode >= 500) throw new AmbiguousMutationException("BYBIT_HTTP_5XX");
         var document = JsonDocument.Parse(body); var code = Integer(document.RootElement, "retCode");
         if (response.IsSuccessStatusCode && code == 0) return document;
-        document.Dispose(); throw new ExchangeApiException("BYBIT_" + code);
+        var detail = Text(document.RootElement, "retMsg");
+        document.Dispose(); throw new ExchangeApiException("BYBIT_" + code, detail);
     }
 
     private string Hmac(string value)

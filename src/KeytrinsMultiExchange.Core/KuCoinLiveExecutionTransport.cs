@@ -261,7 +261,8 @@ public sealed class KuCoinLiveExecutionTransport(HttpClient http, Func<ExchangeI
         if (ambiguous && (int)response.StatusCode >= 500) throw new AmbiguousMutationException("KUCOIN_HTTP_5XX");
         var document = JsonDocument.Parse(body); var code = Text(document.RootElement, "code");
         if (response.IsSuccessStatusCode && code == "200000") return document;
-        document.Dispose(); throw new ExchangeApiException("KUCOIN_" + code);
+        var detail = Text(document.RootElement, "msg");
+        document.Dispose(); throw new ExchangeApiException("KUCOIN_" + code, detail);
     }
 
     private string Hmac(string value)

@@ -13,9 +13,30 @@ public sealed record ExchangeCredentials(string ApiKey, string ApiSecret, string
 public sealed record CredentialAudit(bool Authenticated, bool TradingPermission, bool WithdrawPermission, string Detail,
     decimal? Balance = null, decimal? Equity = null, int OpenPositionCount = 0);
 
-public sealed class ExchangeApiException(string code) : Exception(code)
+public sealed class ExchangeApiException : Exception
 {
-    public string Code { get; } = code;
+    public ExchangeApiException(string code, string? detail = null) : base(FormatMessage(code, detail))
+    {
+        Code = code;
+        Detail = Sanitize(detail);
+    }
+
+    public string Code { get; }
+    public string? Detail { get; }
+
+    private static string FormatMessage(string code, string? detail)
+    {
+        var safe = Sanitize(detail);
+        return safe is null ? code : code + ":" + safe;
+    }
+
+    private static string? Sanitize(string? detail)
+    {
+        if (string.IsNullOrWhiteSpace(detail)) return null;
+        var normalized = new string(detail.Select(character => char.IsControl(character) ? ' ' : character).ToArray());
+        normalized = string.Join(' ', normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        return normalized.Length <= 256 ? normalized : normalized[..256];
+    }
 }
 
 public interface IExchangeAdapter

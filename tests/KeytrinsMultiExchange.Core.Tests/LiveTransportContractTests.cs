@@ -82,6 +82,72 @@ public sealed class LiveTransportContractTests
     }
 
     [Fact]
+    public async Task Bybit_prepare_uses_account_specific_instrument_eligibility()
+    {
+        var handler = new RouteHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/v5/position/list" => Ok("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[{\"size\":\"0\",\"positionIdx\":0}]}}"),
+            "/v5/account/instruments-info" => Ok("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[{\"status\":\"Trading\",\"settleCoin\":\"USDT\",\"priceFilter\":{\"tickSize\":\"0.001\"},\"lotSizeFilter\":{\"qtyStep\":\"1\",\"minOrderQty\":\"1\",\"maxMktOrderQty\":\"100000\",\"minNotionalValue\":\"5\"}}]}}"),
+            "/v5/market/tickers" => Ok("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[{\"bid1Price\":\"5.20\",\"ask1Price\":\"5.21\",\"markPrice\":\"5.205\"}]}}"),
+            "/v5/account/fee-rate" => Ok("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[{\"takerFeeRate\":\"0.001\"}]}}"),
+            _ => throw new InvalidOperationException(request.RequestUri.PathAndQuery)
+        });
+        var transport = new BybitLiveExecutionTransport(new HttpClient(handler), _ => Credentials);
+        var signal = new CanonicalSignal("bybit-eligibility", "OKX", "UNI-USDT-SWAP",
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), TradeDirection.Short, 5.205, 5.105,
+            0.1, 0.0192, 0.08, 25, 1, "TEST", DateTimeOffset.UtcNow);
+        var options = new RuntimeOptions
+            { RiskUsdt = 3m, MaxCostR = 1m, MaxNotionalUsdt = 1000m, MaxNetLossUsdt = 3m };
+
+        var entry = await transport.PrepareEntryAsync(signal, options, default);
+
+        Assert.Equal("UNIUSDT", entry.Symbol);
+        Assert.Contains(handler.Requests, x => x.Path == "/v5/account/instruments-info" &&
+            x.PathAndQuery.Contains("symbol=UNIUSDT", StringComparison.Ordinal));
+        Assert.DoesNotContain(handler.Requests, x => x.Path == "/v5/market/instruments-info");
+    }
+
+    [Fact]
+    public async Task Bybit_rejection_preserves_safe_ret_msg()
+    {
+        var handler = new RouteHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/v5/position/set-leverage" => Ok("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{}}"),
+            "/v5/order/create" => Ok("{\"retCode\":110123,\"retMsg\":\"You must agree to the Trading Terms\",\"result\":{}}"),
+            _ => throw new InvalidOperationException(request.RequestUri.AbsolutePath)
+        });
+        var transport = new BybitLiveExecutionTransport(new HttpClient(handler), _ => Credentials);
+
+        var error = await Assert.ThrowsAsync<ExchangeApiException>(() =>
+            transport.SubmitEntryAsync(Entry(ExchangeId.Bybit, "XAGUSDT"), default));
+
+        Assert.Equal("BYBIT_110123", error.Code);
+        Assert.Equal("You must agree to the Trading Terms", error.Detail);
+        Assert.Equal("BYBIT_110123:You must agree to the Trading Terms", error.Message);
+        Assert.DoesNotContain(Credentials.ApiSecret, error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Okx_rejection_preserves_item_subcode_and_message()
+    {
+        var handler = new RouteHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/api/v5/account/set-leverage" => Ok("{\"code\":\"0\",\"msg\":\"\",\"data\":[]}"),
+            "/api/v5/trade/order" => Ok("{\"code\":\"1\",\"msg\":\"Operation failed\",\"data\":[{\"sCode\":\"51046\",\"sMsg\":\"The stop price is invalid\"}]}"),
+            _ => throw new InvalidOperationException(request.RequestUri.AbsolutePath)
+        });
+        var transport = new OkxLiveExecutionTransport(new HttpClient(handler), _ => Credentials);
+
+        var error = await Assert.ThrowsAsync<ExchangeApiException>(() =>
+            transport.SubmitEntryAsync(Entry(ExchangeId.Okx, "SPCX-USDT-SWAP"), default));
+
+        Assert.Equal("OKX_51046", error.Code);
+        Assert.Equal("The stop price is invalid", error.Detail);
+        Assert.Equal("OKX_51046:The stop price is invalid", error.Message);
+        Assert.DoesNotContain(Credentials.ApiSecret, error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Kucoin_entry_is_followed_by_reduce_only_exchange_stop()
     {
         var handler = new RouteHandler(request => request.RequestUri!.AbsolutePath switch
