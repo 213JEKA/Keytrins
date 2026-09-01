@@ -1,0 +1,60 @@
+name: KuCoin Adaptive Grid Android
+
+on:
+  push:
+    branches:
+      - kucoin-adaptive-grid-build
+    paths:
+      - 'android/kucoin-adaptive-grid/**'
+      - '.github/workflows/kucoin-grid-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-release-unsigned:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK 35
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Gradle 8.7
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build unsigned release APK
+        working-directory: android/kucoin-adaptive-grid
+        run: gradle --no-daemon clean :app:assembleRelease
+
+      - name: Prepare artifact
+        shell: bash
+        run: |
+          mkdir -p out/signing-tools
+          cp android/kucoin-adaptive-grid/app/build/outputs/apk/release/app-release-unsigned.apk out/KuCoin-Adaptive-Grid-0.1.0-unsigned.apk
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" out/signing-tools/apksigner.jar
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" out/signing-tools/zipalign
+          chmod +x out/signing-tools/zipalign
+          sha256sum out/KuCoin-Adaptive-Grid-0.1.0-unsigned.apk > out/SHA256SUMS.txt
+
+      - name: Upload unsigned APK and signing tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: kucoin-adaptive-grid-0.1.0-unsigned
+          path: out/
+          retention-days: 30
+          if-no-files-found: error
