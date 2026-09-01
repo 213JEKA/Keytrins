@@ -124,8 +124,9 @@ public final class ApiClient {
     }
 
     private static Order parseOrder(JSONObject z){
+        double filled=dnum(z,"filledSize"); if(filled<=0)filled=dnum(z,"dealSize");
         return new Order(z.optString("id"),z.optString("clientOid"),z.optString("side"),z.optString("type"),
-                dnum(z,"price"),z.optInt("size",0),z.optInt("filledSize",z.optInt("dealSize",0)),
+                dnum(z,"price"),(int)Math.round(dnum(z,"size")),(int)Math.round(filled),
                 dnum(z,"avgDealPrice"),z.optBoolean("reduceOnly",false),z.optBoolean("isActive",false),
                 z.optString("status"),z.optLong("createdAt",0));
     }
