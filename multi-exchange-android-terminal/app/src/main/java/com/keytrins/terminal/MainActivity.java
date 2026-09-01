@@ -59,7 +59,7 @@ public final class MainActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " KeytrinsTerminal/1.0");
+        settings.setUserAgentString(settings.getUserAgentString() + " KeytrinsTerminal/1.0.1");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -79,14 +79,26 @@ public final class MainActivity extends Activity {
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if (request.isForMainFrame()) progress.setVisibility(View.GONE);
+                if (request.isForMainFrame()) showError("Сервер недоступен: " + error.getDescription());
             }
 
             @Override
             public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
                 handler.cancel();
+                showError("Ошибка проверки сертификата сервера. Подключение отменено.");
             }
         });
+    }
+
+    private void showError(String message) {
+        progress.setVisibility(View.GONE);
+        String safe = message.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+        String html = "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'>" +
+            "<body style='margin:0;padding:28px;background:#050a12;color:#e8f1ff;font-family:sans-serif'>" +
+            "<h2>Keytrins Terminal</h2><p>" + safe + "</p>" +
+            "<button style='padding:12px;background:#12405a;color:white;border:1px solid #4db9e5' " +
+            "onclick=\"location.href='" + TERMINAL_URL + "'\">ПОВТОРИТЬ</button></body>";
+        webView.loadDataWithBaseURL(TERMINAL_URL, html, "text/html", "UTF-8", null);
     }
 
     @Override

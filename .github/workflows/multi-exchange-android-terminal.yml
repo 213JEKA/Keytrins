@@ -42,12 +42,12 @@ jobs:
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Rename APK
-        run: cp multi-exchange-android-terminal/app/build/outputs/apk/debug/app-debug.apk Keytrins-Multi-Exchange-Terminal-v1.0.0.apk
+        run: cp multi-exchange-android-terminal/app/build/outputs/apk/debug/app-debug.apk Keytrins-Multi-Exchange-Terminal-v1.0.1.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Keytrins-Multi-Exchange-Terminal-v1.0.0
-          path: Keytrins-Multi-Exchange-Terminal-v1.0.0.apk
+          name: Keytrins-Multi-Exchange-Terminal-v1.0.1
+          path: Keytrins-Multi-Exchange-Terminal-v1.0.1.apk
           if-no-files-found: error
           retention-days: 30
