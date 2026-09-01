@@ -1,0 +1,50 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A67EDCE2-55BD-4928-A5F6-BC3FE0C365D7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeytrinsMultiExchange.Core", "src\KeytrinsMultiExchange.Core\KeytrinsMultiExchange.Core.csproj", "{C920D2ED-28CE-48CD-B26B-E68B1932E835}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeytrinsMultiExchange.Service", "src\KeytrinsMultiExchange.Service\KeytrinsMultiExchange.Service.csproj", "{4B7B88B9-3F3C-4DDB-9A90-99432D0A08C4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeytrinsMultiExchange.Terminal", "src\KeytrinsMultiExchange.Terminal\KeytrinsMultiExchange.Terminal.csproj", "{72A6B634-A0B2-46C8-81CB-BF078BE18729}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{F01C8F39-60EB-4179-A84C-672563852C68}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeytrinsMultiExchange.Core.Tests", "tests\KeytrinsMultiExchange.Core.Tests\KeytrinsMultiExchange.Core.Tests.csproj", "{9E916EA8-548D-4018-A841-E34D5CF7F5EC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C920D2ED-28CE-48CD-B26B-E68B1932E835}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C920D2ED-28CE-48CD-B26B-E68B1932E835}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C920D2ED-28CE-48CD-B26B-E68B1932E835}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C920D2ED-28CE-48CD-B26B-E68B1932E835}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4B7B88B9-3F3C-4DDB-9A90-99432D0A08C4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4B7B88B9-3F3C-4DDB-9A90-99432D0A08C4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4B7B88B9-3F3C-4DDB-9A90-99432D0A08C4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4B7B88B9-3F3C-4DDB-9A90-99432D0A08C4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{72A6B634-A0B2-46C8-81CB-BF078BE18729}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{72A6B634-A0B2-46C8-81CB-BF078BE18729}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{72A6B634-A0B2-46C8-81CB-BF078BE18729}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{72A6B634-A0B2-46C8-81CB-BF078BE18729}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9E916EA8-548D-4018-A841-E34D5CF7F5EC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9E916EA8-548D-4018-A841-E34D5CF7F5EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9E916EA8-548D-4018-A841-E34D5CF7F5EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9E916EA8-548D-4018-A841-E34D5CF7F5EC}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{C920D2ED-28CE-48CD-B26B-E68B1932E835} = {A67EDCE2-55BD-4928-A5F6-BC3FE0C365D7}
+		{4B7B88B9-3F3C-4DDB-9A90-99432D0A08C4} = {A67EDCE2-55BD-4928-A5F6-BC3FE0C365D7}
+		{72A6B634-A0B2-46C8-81CB-BF078BE18729} = {A67EDCE2-55BD-4928-A5F6-BC3FE0C365D7}
+		{9E916EA8-548D-4018-A841-E34D5CF7F5EC} = {F01C8F39-60EB-4179-A84C-672563852C68}
+	EndGlobalSection
+EndGlobal

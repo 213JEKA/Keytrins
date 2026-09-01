@@ -1,0 +1,55 @@
+<Window x:Class="KeytrinsMultiExchange.Terminal.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Keytrins Multi-Exchange Terminal" Height="760" Width="1260" MinHeight="600" MinWidth="900"
+        Background="#050A12" Foreground="#E8F1FF">
+  <Window.Resources>
+    <Style TargetType="TextBlock"><Setter Property="Foreground" Value="#E8F1FF"/></Style>
+    <Style TargetType="Button"><Setter Property="Background" Value="#0C2638"/><Setter Property="Foreground" Value="#E8F1FF"/><Setter Property="BorderBrush" Value="#2C6383"/><Setter Property="Padding" Value="10,7"/><Setter Property="Margin" Value="3"/></Style>
+    <Style TargetType="TextBox"><Setter Property="Background" Value="#091624"/><Setter Property="Foreground" Value="#E8F1FF"/><Setter Property="BorderBrush" Value="#244B65"/><Setter Property="Padding" Value="8"/></Style>
+    <Style TargetType="ListBox"><Setter Property="Background" Value="#091624"/><Setter Property="Foreground" Value="#E8F1FF"/><Setter Property="BorderBrush" Value="#244B65"/></Style>
+    <Style TargetType="ListBoxItem"><Setter Property="Foreground" Value="#E8F1FF"/><Setter Property="Background" Value="#091624"/><Setter Property="Padding" Value="5"/><Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#15577A"/><Setter Property="Foreground" Value="#FFFFFF"/></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#103A53"/></Trigger></Style.Triggers></Style>
+    <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#0C2638"/><Setter Property="Foreground" Value="#E8F1FF"/><Setter Property="BorderBrush" Value="#244B65"/><Setter Property="Padding" Value="7,5"/></Style>
+    <Style TargetType="DataGridCell"><Setter Property="Foreground" Value="#E8F1FF"/><Setter Property="BorderBrush" Value="#17364B"/><Setter Property="Padding" Value="5,3"/></Style>
+    <Style TargetType="TabItem"><Setter Property="Foreground" Value="#E8F1FF"/><Setter Property="Background" Value="#0C2638"/><Setter Property="BorderBrush" Value="#244B65"/><Setter Property="Padding" Value="10,6"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem"><Border x:Name="TabBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" Padding="{TemplateBinding Padding}" Margin="0,0,3,0"><ContentPresenter ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="TabBorder" Property="Background" Value="#15577A"/><Setter Property="Foreground" Value="#FFFFFF"/></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="TabBorder" Property="Background" Value="#103A53"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+  </Window.Resources>
+  <Grid Margin="18"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <DockPanel><StackPanel><TextBlock Text="KEYTRINS • SERVER-OWNED RUNTIME" Foreground="#67D8FF" FontSize="12"/><TextBlock Text="Multi-Exchange Terminal" FontSize="30" FontWeight="SemiBold"/></StackPanel><Border x:Name="ConnectionBadge" DockPanel.Dock="Right" Background="#442D16" CornerRadius="12" Padding="12,6" VerticalAlignment="Center"><TextBlock x:Name="ConnectionText" Text="OFFLINE"/></Border></DockPanel>
+    <Grid Grid.Row="1" Margin="0,15,0,10"><Grid.ColumnDefinitions><ColumnDefinition Width="2*"/><ColumnDefinition Width="3*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="ServerUrl" Text="https://37.252.21.226"/><PasswordBox x:Name="ControlToken" Grid.Column="1" Margin="8,0" Background="#091624" Foreground="#E8F1FF" BorderBrush="#244B65" Padding="8"/><Button Grid.Column="2" Content="ПОДКЛЮЧИТЬСЯ" Click="Connect_Click"/></Grid>
+    <Border Grid.Row="2" Background="#091624" BorderBrush="#18364F" BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,0,0,12"><StackPanel Orientation="Horizontal"><TextBlock Text="MASTER SIGNAL: OKX" FontWeight="Bold"/><TextBlock x:Name="MasterStatus" Margin="22,0" Text="—"/><TextBlock x:Name="UniverseStatus" Margin="22,0" Text="Universe —"/><TextBlock x:Name="LastSignalStatus" Margin="22,0" Text="last signal —"/></StackPanel></Border>
+    <TabControl Grid.Row="3" Background="#07111F" Foreground="#E8F1FF">
+      <TabItem Header="ГЛАВНАЯ"><Grid Margin="8"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="3*"/><RowDefinition Height="Auto"/><RowDefinition Height="2*"/></Grid.RowDefinitions><TextBlock Text="Отметьте галочками нужные биржи и один раз нажмите «ВКЛЮЧИТЬ ВЫБРАННЫЕ»." Foreground="#67D8FF" Margin="0,0,0,7"/><DataGrid x:Name="ExchangeGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="False" SelectionUnit="FullRow" Background="#08131F" Foreground="#E8F1FF" RowBackground="#08131F" AlternatingRowBackground="#0C1B2A"><DataGrid.Columns><DataGridCheckBoxColumn Header="Выбрать" Binding="{Binding Selected, UpdateSourceTrigger=PropertyChanged}" Width="75"/><DataGridTextColumn Header="Биржа" Binding="{Binding Exchange}" IsReadOnly="True" Width="120"/><DataGridTextColumn Header="Режим" Binding="{Binding Mode}" IsReadOnly="True" Width="95"/><DataGridTextColumn Header="Готовность" Binding="{Binding Readiness}" IsReadOnly="True" Width="160"/><DataGridTextColumn Header="Public" Binding="{Binding Public}" IsReadOnly="True" Width="65"/><DataGridTextColumn Header="Private" Binding="{Binding Private}" IsReadOnly="True" Width="65"/><DataGridTextColumn Header="Trade" Binding="{Binding Trade}" IsReadOnly="True" Width="65"/><DataGridTextColumn Header="Withdraw" Binding="{Binding Withdraw}" IsReadOnly="True" Width="75"/><DataGridTextColumn Header="Позиции" Binding="{Binding Positions}" IsReadOnly="True" Width="75"/><DataGridTextColumn Header="Подробно" Binding="{Binding Detail}" IsReadOnly="True" Width="*"/></DataGrid.Columns></DataGrid><TextBlock Grid.Row="2" Text="Открытые позиции" FontWeight="SemiBold" Margin="0,10,0,7"/><DataGrid x:Name="PositionGrid" Grid.Row="3" AutoGenerateColumns="True" IsReadOnly="True" Background="#08131F" Foreground="#E8F1FF" RowBackground="#08131F" AlternatingRowBackground="#0C1B2A"/></Grid></TabItem>
+      <TabItem Header="НАСТРОЙКИ">
+        <ScrollViewer VerticalScrollBarVisibility="Auto"><Grid Margin="14"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+          <Border Background="#08131F" BorderBrush="#193B54" BorderThickness="1" CornerRadius="12" Padding="18"><StackPanel>
+            <TextBlock Text="Основные настройки" FontSize="21" FontWeight="SemiBold"/>
+            <TextBlock Text="Рабочие параметры хранятся на сервере и применяются ко всем выбранным биржам." Foreground="#7892AA" TextWrapping="Wrap" Margin="0,5,0,14"/>
+            <TextBlock Text="Сумма риска на позицию, USDT"/><TextBox x:Name="RiskUsdtInput" Margin="0,4,0,11"/>
+            <TextBlock Text="Максимальный чистый убыток на позицию, USDT"/><TextBox x:Name="MaxNetLossUsdtInput" Margin="0,4,0,11"/>
+            <TextBlock Text="Количество анализируемых пар"/><TextBox x:Name="UniverseSizeInput" Margin="0,4,0,11"/>
+            <TextBlock Text="Плечо" Visibility="Collapsed"/><TextBox x:Name="LeverageInput" Visibility="Collapsed"/>
+            <TextBlock Text="Макс. notional, USDT" Visibility="Collapsed"/><TextBox x:Name="MaxNotionalInput" Visibility="Collapsed"/>
+            <TextBlock Text="Макс. Cost/R" Visibility="Collapsed"/><TextBox x:Name="MaxCostRInput" Visibility="Collapsed"/>
+            <Button Content="СОХРАНИТЬ ПАРАМЕТРЫ" HorizontalAlignment="Left" Click="SaveRuntime_Click"/>
+            <TextBlock x:Name="RuntimeSettingsResult" Foreground="#67D8FF" Margin="3,8,0,0"/>
+          </StackPanel></Border>
+          <Border Grid.Column="2" Background="#08131F" BorderBrush="#193B54" BorderThickness="1" CornerRadius="12" Padding="18"><StackPanel>
+            <TextBlock Text="API-ключи бирж" FontSize="21" FontWeight="SemiBold"/>
+            <TextBlock Text="Хранятся на сервере в зашифрованном виде. Секреты обратно не показываются." Foreground="#7892AA" TextWrapping="Wrap" Margin="0,5,0,14"/>
+            <TextBlock Text="Биржа"/><ListBox x:Name="CredentialExchange" Height="92" Margin="0,4,0,11"/>
+            <TextBlock Text="API Key"/><PasswordBox x:Name="ApiKeyInput" Margin="0,4,0,11" Background="#091624" Foreground="#E8F1FF" BorderBrush="#244B65" Padding="8"/>
+            <TextBlock Text="API Secret"/><PasswordBox x:Name="ApiSecretInput" Margin="0,4,0,11" Background="#091624" Foreground="#E8F1FF" BorderBrush="#244B65" Padding="8"/>
+            <TextBlock Text="Passphrase (если нужна)"/><PasswordBox x:Name="PassphraseInput" Margin="0,4,0,14" Background="#091624" Foreground="#E8F1FF" BorderBrush="#244B65" Padding="8"/>
+            <StackPanel Orientation="Horizontal"><Button Content="СОХРАНИТЬ КЛЮЧ" Click="SaveCredentials_Click"/><Button Content="УДАЛИТЬ КЛЮЧ" Background="#4B1620" Click="ClearCredentials_Click"/></StackPanel>
+            <TextBlock x:Name="CredentialSettingsResult" Foreground="#67D8FF" Margin="3,8,0,8"/>
+            <TextBlock Text="Статус ключей" FontWeight="SemiBold"/><ListBox x:Name="CredentialStatusList" Height="155" Margin="0,5,0,0" IsHitTestVisible="False"/>
+          </StackPanel></Border>
+        </Grid></ScrollViewer>
+      </TabItem>
+      <TabItem Header="ИСТОРИЯ"><DataGrid x:Name="HistoryGrid" AutoGenerateColumns="True" IsReadOnly="True" Background="#08131F" Foreground="#E8F1FF"/></TabItem>
+      <TabItem Header="ЖУРНАЛ"><DataGrid x:Name="LogGrid" AutoGenerateColumns="True" IsReadOnly="True" Background="#08131F" Foreground="#E8F1FF"/></TabItem>
+      <TabItem Header="СЕРВЕР"><TextBox x:Name="ServerInfo" IsReadOnly="True" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" FontFamily="Consolas"/></TabItem>
+    </TabControl>
+    <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0"><Button Content="ПАУЗА ВЫБРАННЫХ" Click="Pause_Click"/><Button Content="ВКЛЮЧИТЬ ВЫБРАННЫЕ" Click="Enable_Click"/><Button Background="#4B1620" Content="ЗАКРЫТЬ ВЫБРАННЫЕ И ОТКЛЮЧИТЬ" Click="CloseAll_Click"/></StackPanel>
+  </Grid>
+</Window>

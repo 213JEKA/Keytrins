@@ -1,0 +1,53 @@
+.settingsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+.settingsCard {
+  background: linear-gradient(145deg, #0c1b2a, #08131f);
+  border: 1px solid #193b54;
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 14px 40px #0005;
+}
+.settingsCard h2 { margin-top: 0; }
+.settingsCard label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 11px 0;
+  color: #b9cce0;
+  font-size: 13px;
+}
+.settingsCard select {
+  border: 1px solid #23506d;
+  background: #0c1e2e;
+  color: #e8f1ff;
+  padding: 10px 13px;
+  border-radius: 8px;
+}
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0 12px;
+}
+.hint { color: #7892aa; font-size: 13px; line-height: 1.5; }
+.primary { background: #0f4c68 !important; border-color: #49aacf !important; }
+.buttonRow { display: flex; gap: 8px; flex-wrap: wrap; }
+.result { display: block; min-height: 20px; margin-top: 10px; color: #67d8ff; }
+.credentialStatus {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 6px;
+  margin-top: 14px;
+}
+.credentialStatus span { padding: 8px; border: 1px solid #193b54; border-radius: 7px; font-size: 12px; }
+.credentialStatus .configured { color: #5df0a5; border-color: #1c8353; }
+.advancedHidden { display: none !important; }
+.batchActions { margin: 8px 0 14px; }
+.exchangeSelect { display: flex !important; flex-direction: row !important; align-items: center; gap: 9px; margin: 0 !important; }
+.exchangeSelect input { width: 19px; height: 19px; accent-color: #49aacf; }
+@media (max-width: 600px) {
+  .settingsGrid { grid-template-columns: 1fr; }
+  .buttonRow button { flex: 1; }
+}

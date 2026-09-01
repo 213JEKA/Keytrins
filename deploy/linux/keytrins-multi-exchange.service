@@ -1,0 +1,25 @@
+[Unit]
+Description=Keytrins Multi-Exchange Server Runtime
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=keytrins
+Group=keytrins
+WorkingDirectory=/opt/keytrins-multi-exchange
+EnvironmentFile=/etc/keytrins-multi-exchange/runtime.env
+ExecStart=/opt/keytrins-multi-exchange/KeytrinsMultiExchange.Service
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+KillSignal=SIGINT
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/keytrins-multi-exchange /var/log/keytrins-multi-exchange
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target
