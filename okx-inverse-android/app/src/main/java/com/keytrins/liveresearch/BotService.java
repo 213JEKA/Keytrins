@@ -15,7 +15,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class BotService extends Service {
-    private static final String CHANNEL = "live_research_bot";
+    private static final String CHANNEL = "okx_inverse_bot";
     private static final int NOTIFY_ID = 101;
     private ExecutorService executor;
     private volatile LiveResearchEngine engine;
@@ -29,7 +29,7 @@ public class BotService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (BotRuntime.running.getAndSet(true)) return START_NOT_STICKY;
         SettingsStore.Snapshot s = new SettingsStore(this).load();
-        BotRuntime.status = s.live ? "LIVE • запуск" : "OBSERVE • запуск";
+        BotRuntime.status = s.live ? "OKX INVERSE LIVE • запуск" : "OKX INVERSE OBSERVE • запуск";
         BotRuntime.log(BotRuntime.status);
         updateNotification(BotRuntime.status);
 
@@ -51,8 +51,8 @@ public class BotService extends Service {
 
     private void createChannel() {
         if (Build.VERSION.SDK_INT >= 26) {
-            NotificationChannel c = new NotificationChannel(CHANNEL, "Live Research robot", NotificationManager.IMPORTANCE_LOW);
-            c.setDescription("Фоновый мониторинг рынка и управление позициями");
+            NotificationChannel c = new NotificationChannel(CHANNEL, "OKX Inverse", NotificationManager.IMPORTANCE_LOW);
+            c.setDescription("Фоновый мониторинг OKX и управление позициями");
             ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(c);
         }
     }
@@ -61,7 +61,7 @@ public class BotService extends Service {
         PendingIntent pi = PendingIntent.getActivity(this, 0,
                 new Intent(this, MainActivity.class), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL) : new Notification.Builder(this);
-        return b.setContentTitle("Live Research")
+        return b.setContentTitle("OKX Inverse")
                 .setContentText(text)
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .setOngoing(true)
