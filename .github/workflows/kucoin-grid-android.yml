@@ -48,16 +48,16 @@ jobs:
         shell: bash
         run: |
           mkdir -p out/signing-tools
-          cp android/kucoin-adaptive-grid/app/build/outputs/apk/release/app-release-unsigned.apk out/KuCoin-Adaptive-Grid-0.2.0-unsigned.apk
+          cp android/kucoin-adaptive-grid/app/build/outputs/apk/release/app-release-unsigned.apk out/KuCoin-Adaptive-Grid-0.2.1-unsigned.apk
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" out/signing-tools/apksigner.jar
           cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" out/signing-tools/zipalign
           chmod +x out/signing-tools/zipalign
-          sha256sum out/KuCoin-Adaptive-Grid-0.2.0-unsigned.apk > out/SHA256SUMS.txt
+          sha256sum out/KuCoin-Adaptive-Grid-0.2.1-unsigned.apk > out/SHA256SUMS.txt
 
       - name: Upload unsigned APK and signing tools
         uses: actions/upload-artifact@v4
         with:
-          name: kucoin-adaptive-grid-0.2.0-unsigned
+          name: kucoin-adaptive-grid-0.2.1-unsigned
           path: out/
           retention-days: 30
           if-no-files-found: error
