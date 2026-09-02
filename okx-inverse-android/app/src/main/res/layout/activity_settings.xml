@@ -95,7 +95,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="OKX Inverse • защита прибыли"
+                android:text="OKX Inverse • защита прибыли и убытка"
                 android:textColor="@color/text"
                 android:textSize="18sp"
                 android:textStyle="bold" />
@@ -104,7 +104,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Входная логика OKX Inverse сохранена: фактическое направление сделки противоположно исходному сигналу.\n\nProfit-lock: шаг $1 / отставание $1. Peak +$1 → BE + издержки • +$2 → защита около +$1 • +$3 → около +$2 • дальше без лимита. Фиксированного TP нет.\n\nКомиссии, spread и tick-buffer входят в расчёт защищённого результата. Если серверный SL не успел обновиться и цена пересекла защищённый уровень, остаток позиции закрывается reduce-only market catch-up.\n\nЗащитный SL двигается только в сторону прибыли и никогда не ослабляется. Peak и Protected сохраняются в SQLite между перезапусками."
+                android:text="Входная логика OKX Inverse НЕ изменена: фактическое направление сделки по-прежнему противоположно исходному сигналу.\n\nЖёсткий убыток: около −$1.00 NET максимум. После входа ставится более защитный из strategy stop и hard −$1 stop; software catch-up закрывает позицию при достижении лимита.\n\nProfit-lock по NET: Peak +$0.80 → защита около +$0.35 • +$1.00 → +$0.50 • +$1.50 → +$1.00 • +$2.00 → +$1.50 • далее каждые +$0.50 пика защита повышается ещё на +$0.50 без лимита. Фиксированного TP нет.\n\nКомиссии, spread и tick-buffer входят в расчёт. Защитный SL двигается только в сторону прибыли и никогда не ослабляется. Peak и Protected сохраняются в SQLite между перезапусками."
                 android:textColor="@color/muted"
                 android:textSize="13sp" />
         </LinearLayout>
