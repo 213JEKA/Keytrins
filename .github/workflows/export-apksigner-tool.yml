@@ -1,0 +1,35 @@
+name: Export Android apksigner tool
+
+on:
+  push:
+    branches:
+      - live-research-android-v01
+    paths:
+      - '.github/workflows/export-apksigner-tool.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install build tools
+        run: sdkmanager "build-tools;35.0.0"
+      - name: Stage apksigner
+        run: |
+          mkdir -p "$RUNNER_TEMP/apksigner-tool/lib"
+          cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" "$RUNNER_TEMP/apksigner-tool/"
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" "$RUNNER_TEMP/apksigner-tool/lib/"
+          chmod +x "$RUNNER_TEMP/apksigner-tool/apksigner"
+      - name: Upload apksigner
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-apksigner-35.0.0
+          path: ${{ runner.temp }}/apksigner-tool
+          if-no-files-found: error
