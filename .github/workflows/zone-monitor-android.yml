@@ -1,0 +1,39 @@
+name: Build Zone Monitor Android
+
+on:
+  push:
+    branches: [zone-monitor-android-v01]
+    paths:
+      - "zone-monitor-android/**"
+      - ".github/workflows/zone-monitor-android.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Build unsigned release APK
+        working-directory: zone-monitor-android
+        run: gradle --no-daemon clean assembleRelease
+      - name: Collect signer
+        run: |
+          mkdir -p zone-monitor-android/dist
+          cp zone-monitor-android/app/build/outputs/apk/release/app-release-unsigned.apk zone-monitor-android/dist/ZoneMonitor-v0.1.0-unsigned.apk
+          cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" zone-monitor-android/dist/apksigner.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zone-monitor-v0.1.0-build
+          path: zone-monitor-android/dist/*
+          retention-days: 3

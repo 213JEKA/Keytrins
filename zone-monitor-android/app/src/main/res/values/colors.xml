@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="app_bg">#071019</color>
+    <color name="panel_bg">#101C28</color>
+    <color name="text_primary">#F2F6FA</color>
+    <color name="accent">#2DCB96</color>
+</resources>
