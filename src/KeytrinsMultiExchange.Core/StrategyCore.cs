@@ -26,6 +26,32 @@ public sealed class OkxStrategyCore
 
     public OkxStrategyCore(StrategyParameters? parameters = null) => _s = parameters ?? new StrategyParameters();
 
+    public StrategyChartSnapshot BuildChart(string symbol, IReadOnlyList<Candle> h1,
+        IReadOnlyList<Candle> m15, int maximumPoints = 120)
+    {
+        var decision = BuildSignal(symbol, h1, m15);
+        var hFast = Indicators.Ema(h1, _s.H1EmaFast);
+        var hSlow = Indicators.Ema(h1, _s.H1EmaSlow);
+        var hAdx = Indicators.Adx(h1, _s.AtrPeriod);
+        var mFast = Indicators.Ema(m15, _s.M15EmaFast);
+        var mSlow = Indicators.Ema(m15, _s.M15EmaSlow);
+        var mAtr = Indicators.Atr(m15, _s.AtrPeriod);
+        var hi = h1.Count - 1;
+        var mi = m15.Count - 1;
+        var slopeIndex = hi - _s.H1SlopeBars;
+        var from = Math.Max(0, m15.Count - Math.Max(20, maximumPoints));
+        var points = Enumerable.Range(from, m15.Count - from).Select(index => new StrategyChartPoint(
+            m15[index].StartMs, m15[index].Open, m15[index].High, m15[index].Low, m15[index].Close,
+            Finite(mFast[index]), Finite(mSlow[index]))).ToArray();
+        var h1Passed = decision.Reason is "NO_M15_PULLBACK" or "NO_M15_CONFIRMATION" or "INVALID_STOP" or "SIGNAL";
+        var pullbackPassed = decision.Reason is "NO_M15_CONFIRMATION" or "INVALID_STOP" or "SIGNAL";
+        var confirmationPassed = decision.Reason is "INVALID_STOP" or "SIGNAL";
+        return new(symbol, DateTimeOffset.UtcNow, decision.Reason, decision.Signal,
+            ValueAt(hFast, hi), ValueAt(hSlow, hi), ValueAt(hFast, slopeIndex),
+            hi >= 0 ? Finite(h1[hi].Close) : null, ValueAt(hAdx, hi), _s.AdxMin,
+            ValueAt(mAtr, mi), _s.AtrSlMultiplier, h1Passed, pullbackPassed, confirmationPassed, points);
+    }
+
     public StrategyDecision BuildSignal(string symbol, IReadOnlyList<Candle> h1, IReadOnlyList<Candle> m15)
     {
         var needH1 = Math.Max(_s.H1EmaSlow + 10, 220);
@@ -104,6 +130,11 @@ public sealed class OkxStrategyCore
             risk / entry, atr, adx, score, "H1_TREND_M15_PULLBACK_CONFIRM", DateTimeOffset.UtcNow);
         return new(signal, "SIGNAL");
     }
+
+    private static double? ValueAt(IReadOnlyList<double> values, int index) =>
+        index >= 0 && index < values.Count ? Finite(values[index]) : null;
+
+    private static double? Finite(double value) => double.IsFinite(value) ? value : null;
 }
 
 public static class Indicators

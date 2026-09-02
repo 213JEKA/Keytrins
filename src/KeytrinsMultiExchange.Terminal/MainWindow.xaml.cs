@@ -7,7 +7,11 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
+using Line = System.Windows.Shapes.Line;
+using Polyline = System.Windows.Shapes.Polyline;
+using Rectangle = System.Windows.Shapes.Rectangle;
 
 namespace KeytrinsMultiExchange.Terminal;
 
@@ -18,6 +22,8 @@ public partial class MainWindow : Window
     private string _baseUrl = string.Empty;
     private string _token = string.Empty;
     private bool _settingsLoaded;
+    private bool _updatingStrategyPicker;
+    private JsonElement? _strategyChartPayload;
     private static readonly string[] Exchanges = ["Okx", "Bybit", "KuCoinFutures"];
 
     public MainWindow()
@@ -120,6 +126,7 @@ public partial class MainWindow : Window
             using var history = await GetAsync("/api/history?limit=100"); HistoryGrid.ItemsSource = Rows(history.RootElement);
             using var logs = await GetAsync("/api/logs?limit=200"); LogGrid.ItemsSource = Rows(logs.RootElement);
             await LoadSettingsAsync();
+            await LoadStrategyOverviewAsync();
             ConnectionText.Text = "ONLINE"; ConnectionBadge.Background = new SolidColorBrush(Color.FromRgb(18, 86, 55));
         }
         catch (Exception exception)
@@ -128,6 +135,166 @@ public partial class MainWindow : Window
             ConnectionBadge.Background = new SolidColorBrush(Color.FromRgb(105, 32, 45));
         }
     }
+
+    private async Task LoadStrategyOverviewAsync()
+    {
+        using var overview = await GetAsync("/api/strategy/overview");
+        var symbols = overview.RootElement.EnumerateArray().Select(x => Text(x, "symbol")).Where(x => x.Length > 0).ToArray();
+        if (symbols.Length == 0) return;
+        var selected = StrategySymbolPicker.SelectedItem?.ToString();
+        _updatingStrategyPicker = true;
+        StrategySymbolPicker.ItemsSource = symbols;
+        StrategySymbolPicker.SelectedItem = selected is not null && symbols.Contains(selected) ? selected : symbols[0];
+        _updatingStrategyPicker = false;
+        await LoadStrategyChartAsync();
+    }
+
+    private async Task LoadStrategyChartAsync()
+    {
+        var symbol = StrategySymbolPicker.SelectedItem?.ToString();
+        if (string.IsNullOrWhiteSpace(symbol)) return;
+        using var document = await GetAsync("/api/strategy/chart?symbol=" + Uri.EscapeDataString(symbol));
+        _strategyChartPayload = document.RootElement.Clone();
+        RenderStrategySummary(_strategyChartPayload.Value);
+        DrawStrategyChart(_strategyChartPayload.Value);
+    }
+
+    private async void StrategySymbolPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingStrategyPicker) return;
+        try { await LoadStrategyChartAsync(); } catch { }
+    }
+
+    private void StrategyChartCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_strategyChartPayload is { } payload) DrawStrategyChart(payload);
+    }
+
+    private void RenderStrategySummary(JsonElement payload)
+    {
+        var chart = payload.GetProperty("chart");
+        var decision = Text(chart, "decision");
+        var signal = chart.TryGetProperty("signal", out var signalValue) && signalValue.ValueKind == JsonValueKind.Object
+            ? signalValue : default;
+        StrategyDecisionText.Text = $"{Text(chart, "symbol")}: {StrategyDecisionLabel(decision)} • " +
+            $"H1 тренд: {YesNo(Flag(chart, "h1TrendPassed"))} • M15 возврат: {YesNo(Flag(chart, "pullbackPassed"))} • " +
+            $"M15 подтверждение: {YesNo(Flag(chart, "confirmationPassed"))} • ADX {NumberText(chart, "adx")} / минимум {NumberText(chart, "adxMinimum")}" +
+            (signal.ValueKind == JsonValueKind.Object
+                ? $" • базовый сигнал {Text(signal, "baseSignalDirection")} • фактический вход {Text(signal, "actualDirection")} • score {NumberText(signal, "score")}" : "");
+        var management = payload.GetProperty("management");
+        var positionLines = payload.GetProperty("positions").EnumerateArray().Select(position =>
+            $"{Text(position, "exchange")}: entry {NumberText(position, "entryPrice")}, mark {NumberText(position, "markPrice")}, " +
+            $"hard stop {NumberText(position, "hardLossStop")}, current stop {NumberText(position, "currentStop")}, " +
+            $"peak NET {NumberText(position, "peakNetProfitUsdt")}, protected NET {NumberText(position, "protectedNetProfitUsdt")}").ToArray();
+        var locks = management.GetProperty("dollarLock").EnumerateArray().Select(level =>
+            $"peak +{NumberText(level, "peakNet")} → защита +{NumberText(level, "protectedNet")}");
+        StrategyManagementText.Text = $"Удержание: до аварийного NET-убытка −{NumberText(management, "maxNetLossUsdt")} USDT или подтверждённого защитного стопа. " +
+            $"Dollar Lock: {string.Join(" • ", locks)}.\n" +
+            (positionLines.Length == 0 ? "Активной позиции терминала по этому сигналу сейчас нет." : string.Join("\n", positionLines));
+    }
+
+    private void DrawStrategyChart(JsonElement payload)
+    {
+        var width = StrategyChartCanvas.ActualWidth;
+        var height = StrategyChartCanvas.ActualHeight;
+        if (width < 180 || height < 140) return;
+        StrategyChartCanvas.Children.Clear();
+        var chart = payload.GetProperty("chart");
+        var points = chart.GetProperty("points").EnumerateArray().Select(point => new ChartPoint(
+            Number(point, "startMs"), Number(point, "open"), Number(point, "high"), Number(point, "low"),
+            Number(point, "close"), NullableNumber(point, "emaFast"), NullableNumber(point, "emaSlow"))).ToArray();
+        if (points.Length == 0) return;
+        var levels = new List<ChartLevel>();
+        if (chart.TryGetProperty("signal", out var signal) && signal.ValueKind == JsonValueKind.Object)
+        {
+            levels.Add(new(Number(signal, "okxEntryRef"), "ВХОД", Brush("#FFE16A")));
+            levels.Add(new(Number(signal, "okxStopRef"), "СТОП", Brush("#FF6F80")));
+        }
+        foreach (var position in payload.GetProperty("positions").EnumerateArray())
+        {
+            var stop = Number(position, "currentStop");
+            if (stop > 0) levels.Add(new(stop, Text(position, "exchange") + " ЗАЩИТА", Brush("#73F0AA")));
+        }
+        var prices = points.SelectMany(x => new[] { x.Low, x.High }).Concat(levels.Select(x => x.Value)).ToArray();
+        var minimum = prices.Min(); var maximum = prices.Max();
+        var padding = Math.Max((maximum - minimum) * 0.08, Math.Abs(maximum == 0 ? 1 : maximum) * 0.001);
+        minimum -= padding; maximum += padding;
+        const double left = 66, right = 125, top = 18, bottom = 32;
+        var plotWidth = Math.Max(10, width - left - right); var plotHeight = Math.Max(10, height - top - bottom);
+        double X(int index) => left + (index + 0.5) * plotWidth / points.Length;
+        double Y(double value) => top + (maximum - value) / (maximum - minimum) * plotHeight;
+        for (var index = 0; index <= 5; index++)
+        {
+            var price = maximum - (maximum - minimum) * index / 5; var y = Y(price);
+            AddLine(left, y, width - right, y, Brush("#17364B"));
+            AddLabel(price.ToString("G7", CultureInfo.InvariantCulture), 4, y - 8, Brush("#91A9BF"));
+        }
+        var candleWidth = Math.Max(2, Math.Min(8, plotWidth / points.Length * 0.62));
+        for (var index = 0; index < points.Length; index++)
+        {
+            var point = points[index]; var color = point.Close >= point.Open ? Brush("#50D99A") : Brush("#FF6F80");
+            AddLine(X(index), Y(point.High), X(index), Y(point.Low), color);
+            var body = new Rectangle { Width = candleWidth, Height = Math.Max(1, Math.Abs(Y(point.Open) - Y(point.Close))), Fill = color };
+            Canvas.SetLeft(body, X(index) - candleWidth / 2); Canvas.SetTop(body, Math.Min(Y(point.Open), Y(point.Close)));
+            StrategyChartCanvas.Children.Add(body);
+        }
+        AddSeries(points, x => x.EmaFast, Brush("#67D8FF"), X, Y);
+        AddSeries(points, x => x.EmaSlow, Brush("#FFB45C"), X, Y);
+        foreach (var level in levels)
+        {
+            var y = Y(level.Value); AddLine(left, y, width - right, y, level.Brush, [6, 4]);
+            AddLabel($"{level.Label} {level.Value:G7}", width - right + 7, y - 8, level.Brush);
+        }
+        AddLine(left, top, width - right, top, Brush("#2B5671"));
+        AddLine(left, top + plotHeight, width - right, top + plotHeight, Brush("#2B5671"));
+        AddLine(left, top, left, top + plotHeight, Brush("#2B5671"));
+        AddLine(width - right, top, width - right, top + plotHeight, Brush("#2B5671"));
+    }
+
+    private void AddSeries(IReadOnlyList<ChartPoint> points, Func<ChartPoint, double?> selector, Brush brush,
+        Func<int, double> x, Func<double, double> y)
+    {
+        var line = new Polyline { Stroke = brush, StrokeThickness = 1.6 };
+        for (var index = 0; index < points.Count; index++)
+            if (selector(points[index]) is { } value) line.Points.Add(new Point(x(index), y(value)));
+        StrategyChartCanvas.Children.Add(line);
+    }
+
+    private void AddLine(double x1, double y1, double x2, double y2, Brush brush, DoubleCollection? dash = null)
+    {
+        StrategyChartCanvas.Children.Add(new Line { X1 = x1, Y1 = y1, X2 = x2, Y2 = y2,
+            Stroke = brush, StrokeThickness = 1, StrokeDashArray = dash });
+    }
+
+    private void AddLabel(string text, double left, double top, Brush brush)
+    {
+        var label = new TextBlock { Text = text, Foreground = brush, FontSize = 11 };
+        Canvas.SetLeft(label, left); Canvas.SetTop(label, top); StrategyChartCanvas.Children.Add(label);
+    }
+
+    private static Brush Brush(string color) => new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
+    private static double Number(JsonElement item, string property) =>
+        item.TryGetProperty(property, out var value) && value.TryGetDouble(out var number) ? number : 0;
+    private static double? NullableNumber(JsonElement item, string property) =>
+        item.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) ? number : null;
+    private static string NumberText(JsonElement item, string property) =>
+        item.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number)
+            ? number.ToString("G8", CultureInfo.InvariantCulture) : "—";
+    private static string StrategyDecisionLabel(string reason) => reason switch
+    {
+        "SIGNAL" => "СИГНАЛ СОЗДАН",
+        "NO_H1_TREND" => "нет подтверждённого тренда H1",
+        "NO_M15_PULLBACK" => "не было возврата M15 в зону EMA 20/50",
+        "NO_M15_CONFIRMATION" => "нет подтверждающей свечи M15",
+        "NOT_ENOUGH_BARS" => "недостаточно закрытых свечей",
+        "INDICATOR_NAN" => "индикаторы ещё не рассчитаны",
+        "INVALID_STOP" => "получен недопустимый структурный стоп",
+        _ => reason
+    };
+
+    private sealed record ChartPoint(double StartMs, double Open, double High, double Low, double Close,
+        double? EmaFast, double? EmaSlow);
+    private sealed record ChartLevel(double Value, string Label, Brush Brush);
 
     private async Task LoadSettingsAsync(bool forceValues = false)
     {

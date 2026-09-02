@@ -9,9 +9,16 @@
   <header><div><div class="eyebrow">KEYTRINS • LIVE CONTROL</div><h1>Multi-Exchange Terminal</h1></div><span id="connection" class="pill warn">CONNECTING</span></header>
   <section class="auth"><input id="token" type="password" autocomplete="off" placeholder="Control token"><button id="saveToken">Подключиться</button></section>
   <section id="master" class="master"><b>MASTER SIGNAL: OKX</b><span id="masterHealth">—</span><span id="mutationGate" class="pill warn">LIVE: —</span><span id="universe">Universe —</span><span id="lastScan">last scan —</span><span id="lastSignal">last signal —</span></section>
-  <nav><button class="tab active" data-tab="main">Главная</button><button class="tab" data-tab="settings">Настройки</button><button class="tab" data-tab="history">История</button><button class="tab" data-tab="logs">Журнал</button><button class="tab" data-tab="server">Сервер</button></nav>
+  <nav><button class="tab active" data-tab="main">Главная</button><button class="tab" data-tab="strategy">Логика входа</button><button class="tab" data-tab="settings">Настройки</button><button class="tab" data-tab="history">История</button><button class="tab" data-tab="logs">Журнал</button><button class="tab" data-tab="server">Сервер</button></nav>
   <main>
     <section id="main" class="pane active"><p class="hint">Отметьте OKX и нужные ведомые биржи, затем один раз нажмите «Включить выбранные».</p><div class="buttonRow batchActions"><button id="pauseSelected">ПАУЗА ВЫБРАННЫХ</button><button id="enableSelected" class="primary">ВКЛЮЧИТЬ ВЫБРАННЫЕ</button><button id="closeSelected" class="danger">ЗАКРЫТЬ И ОТКЛЮЧИТЬ</button></div><div id="exchangeGrid" class="grid"></div><h2>Позиции терминала</h2><div id="positions" class="positions empty">Открытых позиций терминала нет</div><h2 class="externalTitle">Внешние позиции — только наблюдение</h2><p class="externalWarning">Терминал их не открывал, не принимает под управление и не закрывает.</p><div id="externalPositions" class="positions empty">Внешних позиций нет</div></section>
+    <section id="strategy" class="pane">
+      <div class="strategyToolbar"><label>Анализируемый актив <select id="strategySymbol"></select></label><span id="strategyEvaluated" class="hint">—</span></div>
+      <div id="strategyDecision" class="strategyDecision">Данные появятся после ближайшего сканирования.</div>
+      <div class="strategyChartWrap"><canvas id="strategyChart" aria-label="График логики входа OKX M15"></canvas></div>
+      <div class="strategyLegend"><span class="legendCandle">Свечи M15</span><span class="legendFast">EMA 20</span><span class="legendSlow">EMA 50</span><span class="legendEntry">Вход</span><span class="legendStop">Первоначальный стоп</span><span class="legendCurrent">Текущая защита</span></div>
+      <div id="strategyManagement" class="strategyManagement"></div>
+    </section>
     <section id="settings" class="pane">
       <div class="settingsGrid">
         <article class="settingsCard"><h2>Основные настройки</h2><p class="hint">Рабочие параметры хранятся на сервере и применяются ко всем выбранным биржам.</p>

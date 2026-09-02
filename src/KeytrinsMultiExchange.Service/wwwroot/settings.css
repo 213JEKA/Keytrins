@@ -47,7 +47,18 @@
 .batchActions { margin: 8px 0 14px; }
 .exchangeSelect { display: flex !important; flex-direction: row !important; align-items: center; gap: 9px; margin: 0 !important; }
 .exchangeSelect input { width: 19px; height: 19px; accent-color: #49aacf; }
+.strategyToolbar { display: flex; align-items: end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.strategyToolbar label { display: flex; flex-direction: column; gap: 6px; color: #b9cce0; font-size: 13px; }
+.strategyToolbar select { min-width: 230px; border: 1px solid #23506d; background: #0c1e2e; color: #e8f1ff; padding: 10px 13px; border-radius: 8px; }
+.strategyDecision,.strategyManagement { background: #08131f; border: 1px solid #193b54; border-radius: 10px; padding: 11px 13px; margin: 9px 0; color: #b9cce0; }
+.strategyDecision b,.strategyManagement b { color: #e8f1ff; }
+.strategyChartWrap { height: 520px; min-height: 360px; background: #07111f; border: 1px solid #193b54; border-radius: 10px; overflow: hidden; }
+#strategyChart { width: 100%; height: 100%; display: block; }
+.strategyLegend { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 2px; color: #b9cce0; font-size: 12px; }
+.strategyLegend span::before { content: ''; display: inline-block; width: 18px; height: 3px; margin-right: 6px; vertical-align: middle; background: currentColor; }
+.legendCandle { color: #b9cce0; }.legendFast { color: #67d8ff; }.legendSlow { color: #ffb45c; }.legendEntry { color: #ffe16a; }.legendStop { color: #ff6f80; }.legendCurrent { color: #73f0aa; }
 @media (max-width: 600px) {
   .settingsGrid { grid-template-columns: 1fr; }
   .buttonRow button { flex: 1; }
+  .strategyChartWrap { height: 400px; }
 }

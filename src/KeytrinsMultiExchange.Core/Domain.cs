@@ -35,6 +35,33 @@ public sealed record CanonicalSignal(
 
 public sealed record StrategyDecision(CanonicalSignal? Signal, string Reason);
 
+public sealed record StrategyChartPoint(
+    long StartMs,
+    double Open,
+    double High,
+    double Low,
+    double Close,
+    double? EmaFast,
+    double? EmaSlow);
+
+public sealed record StrategyChartSnapshot(
+    string Symbol,
+    DateTimeOffset EvaluatedAt,
+    string Decision,
+    CanonicalSignal? Signal,
+    double? H1EmaFast,
+    double? H1EmaSlow,
+    double? H1EmaFastThen,
+    double? H1Close,
+    double? Adx,
+    double AdxMinimum,
+    double? M15Atr,
+    double AtrStopMultiplier,
+    bool H1TrendPassed,
+    bool PullbackPassed,
+    bool ConfirmationPassed,
+    IReadOnlyList<StrategyChartPoint> Points);
+
 public sealed record MarketQuote(string Symbol, decimal Bid, decimal Ask, decimal Mark, DateTimeOffset ObservedAt)
 {
     public bool IsStale(TimeSpan maximumAge, DateTimeOffset now) => now - ObservedAt > maximumAge;
@@ -134,7 +161,7 @@ public sealed record ExchangeSnapshot(
 public sealed class RuntimeSnapshot
 {
     public DateTimeOffset StartedAt { get; } = DateTimeOffset.UtcNow;
-    public string Version { get; init; } = "1.1.9";
+    public string Version { get; init; } = "1.1.10";
     public volatile string MasterHealth = "STARTING";
     public volatile string MasterDetail = "initializing";
     public volatile string? LastSignalId;
@@ -147,6 +174,8 @@ public sealed class RuntimeSnapshot
     public ConcurrentDictionary<string, ManagedPosition> Positions { get; } = new();
     public ConcurrentDictionary<string, ExchangePositionTruth> ExternalPositions { get; } = new();
     public ConcurrentDictionary<ExchangeId, RouteAttempt> LastRouteAttempts { get; } = new();
+    public ConcurrentDictionary<string, StrategyChartSnapshot> StrategyCharts { get; } =
+        new(StringComparer.OrdinalIgnoreCase);
 }
 
 public sealed class RuntimeOptions

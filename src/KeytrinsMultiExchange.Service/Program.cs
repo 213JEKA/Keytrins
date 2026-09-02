@@ -73,8 +73,8 @@ app.MapGet("/api/health", async (RuntimeSnapshot state, RuntimeSettingsStore set
     var unmanagedOpen = Math.Max(state.ExternalPositions.Count, exchangeOpen - managedOpen);
     return Results.Ok(new
     {
-        status = state.MasterHealth == "ERROR" || unresolved > 0 || unresolvedRisk > 0 || unmanagedOpen > 0 ||
-                 state.WriterExclusivity != "EXCLUSIVE" ? "degraded" : "ready",
+        status = RuntimeAdmissionPolicy.HealthStatus(state.MasterHealth, unresolved, unresolvedRisk,
+            state.WriterExclusivity),
         version = state.Version,
         uptimeSeconds = (long)(DateTimeOffset.UtcNow - state.StartedAt).TotalSeconds,
         masterSignalSource = "OKX",
@@ -116,6 +116,44 @@ app.MapGet("/api/history", async (TradingDatabase db, int? limit, CancellationTo
     Results.Ok(await db.QueryAsync("route_attempts", limit ?? 100, ct)));
 app.MapGet("/api/signals", async (TradingDatabase db, int? limit, CancellationToken ct) =>
     Results.Ok(await db.QueryAsync("canonical_signals", limit ?? 100, ct)));
+app.MapGet("/api/strategy/overview", (RuntimeSnapshot state) => Results.Ok(state.StrategyCharts.Values
+    .OrderByDescending(x => x.Signal is not null).ThenBy(x => x.Symbol)
+    .Select(x => new
+    {
+        x.Symbol, x.EvaluatedAt, x.Decision,
+        signalId = x.Signal?.SignalId,
+        baseDirection = x.Signal?.BaseSignalDirection,
+        actualDirection = x.Signal?.ActualDirection,
+        entryPrice = x.Signal?.OkxEntryRef,
+        stopPrice = x.Signal?.OkxStopRef,
+        x.Adx, score = x.Signal?.Score,
+        x.H1TrendPassed, x.PullbackPassed, x.ConfirmationPassed
+    }).ToArray()));
+app.MapGet("/api/strategy/chart", (string symbol, RuntimeSnapshot state, RuntimeSettingsStore settings) =>
+{
+    if (!state.StrategyCharts.TryGetValue(symbol, out var chart))
+        return Results.NotFound(new { reason = "STRATEGY_SYMBOL_NOT_ANALYZED", symbol });
+    ManagedPosition[] positions = chart.Signal is null ? [] : state.Positions.Values
+        .Where(x => x.SignalId.Equals(chart.Signal.SignalId, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(x => x.Exchange).ToArray();
+    return Results.Ok(new
+    {
+        chart,
+        positions,
+        management = new
+        {
+            maxNetLossUsdt = settings.Current.MaxNetLossUsdt,
+            dollarLock = new[]
+            {
+                new { peakNet = 1.30m, protectedNet = 1.00m },
+                new { peakNet = 2.00m, protectedNet = 1.50m },
+                new { peakNet = 2.50m, protectedNet = 2.00m },
+                new { peakNet = 3.00m, protectedNet = 2.50m }
+            },
+            semantics = "HOLD_UNTIL_MAX_NET_LOSS_OR_PROTECTED_STOP"
+        }
+    });
+});
 app.MapGet("/api/logs", async (TradingDatabase db, int? limit, CancellationToken ct) =>
     Results.Ok(await db.QueryAsync("event_log", limit ?? 200, ct)));
 app.MapGet("/api/execution/commands", async (TradingDatabase db, int? limit, CancellationToken ct) =>
@@ -261,11 +299,10 @@ static class Control
         if (failed.Length > 0)
             return Results.Conflict(new { reason = "PRIVATE_PREFLIGHT_FAILED", detail = "Credentials and One-Way mode are required.",
                 exchanges = failed.Select(x => new { x.Exchange, x.OpenPositionCount, x.Detail }).ToArray() });
-        var nonFlat = checks.Where(x => x.OpenPositionCount != 0).ToArray();
-        if (nonFlat.Length > 0)
-            return Results.Conflict(new { reason = "EXCHANGE_NOT_FLAT",
-                detail = "Existing exchange positions are not adopted or managed by this runtime.",
-                exchanges = nonFlat.Select(x => new { x.Exchange, x.OpenPositionCount, x.Detail }).ToArray() });
+        // Positions not opened by this runtime remain visible but are never adopted or mutated. They do not
+        // globally block unrelated strategy symbols. Each live transport still rejects an entry when that exact
+        // target symbol already has a position, which avoids merging ownership in One-Way Mode.
+        var observedExternal = checks.Where(x => x.OpenPositionCount != 0).ToArray();
         var writer = await writerGuard.CheckAsync(cancellationToken);
         state.WriterExclusivity = writer.IsExclusive ? "EXCLUSIVE" :
             writer.LatestForeignEntryAt is null ? "QUIET_WINDOW_NOT_EXCLUSIVE" : "FOREIGN_WRITER_ACTIVE";
@@ -287,7 +324,13 @@ static class Control
             settings.SetExchangeMode(id, ExchangeMode.Active);
             state.Exchanges[id] = state.Exchanges[id] with { Mode = ExchangeMode.Active, LastActivity = DateTimeOffset.UtcNow, Detail = "BATCH_ACTIVE" };
         }
-        return Results.Ok(new { enabled = selected.OrderBy(x => x).ToArray(), tradingEnabled = true });
+        return Results.Ok(new
+        {
+            enabled = selected.OrderBy(x => x).ToArray(),
+            tradingEnabled = true,
+            externalPositionsObserved = observedExternal.Select(x => new
+                { x.Exchange, x.OpenPositionCount }).ToArray()
+        });
     }
 }
 

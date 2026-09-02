@@ -95,9 +95,11 @@ public sealed class TradingRuntimeWorker(
                 var h1Task = okx.GetClosedCandlesAsync(instrument.InstrumentId, "1H", 300, cancellationToken);
                 var m15Task = okx.GetClosedCandlesAsync(instrument.InstrumentId, "15m", 300, cancellationToken);
                 await Task.WhenAll(h1Task, m15Task);
-                var decision = new OkxStrategyCore().BuildSignal(instrument.InstrumentId, h1Task.Result, m15Task.Result);
-                await database.AppendLogAsync("STRATEGY_DECISION", $"{instrument.InstrumentId}:{decision.Reason}", "Okx", decision.Signal?.SignalId, cancellationToken);
-                if (decision.Signal is not null) signals[index] = decision.Signal;
+                var chart = new OkxStrategyCore().BuildChart(instrument.InstrumentId, h1Task.Result, m15Task.Result);
+                state.StrategyCharts[instrument.InstrumentId] = chart;
+                await database.AppendLogAsync("STRATEGY_DECISION", $"{instrument.InstrumentId}:{chart.Decision}",
+                    "Okx", chart.Signal?.SignalId, cancellationToken);
+                if (chart.Signal is not null) signals[index] = chart.Signal;
             }
             catch (Exception exception)
             {
