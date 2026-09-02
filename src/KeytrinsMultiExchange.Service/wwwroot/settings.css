@@ -33,7 +33,6 @@
 }
 .hint { color: #7892aa; font-size: 13px; line-height: 1.5; }
 .primary { background: #0f4c68 !important; border-color: #49aacf !important; }
-.buttonRow { display: flex; gap: 8px; flex-wrap: wrap; }
 .result { display: block; min-height: 20px; margin-top: 10px; color: #67d8ff; }
 .credentialStatus {
   display: grid;
@@ -44,9 +43,6 @@
 .credentialStatus span { padding: 8px; border: 1px solid #193b54; border-radius: 7px; font-size: 12px; }
 .credentialStatus .configured { color: #5df0a5; border-color: #1c8353; }
 .advancedHidden { display: none !important; }
-.batchActions { margin: 8px 0 14px; }
-.exchangeSelect { display: flex !important; flex-direction: row !important; align-items: center; gap: 9px; margin: 0 !important; }
-.exchangeSelect input { width: 19px; height: 19px; accent-color: #49aacf; }
 .strategyToolbar { display: flex; align-items: end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
 .strategyToolbar label { display: flex; flex-direction: column; gap: 6px; color: #b9cce0; font-size: 13px; }
 .strategyToolbar select { min-width: 230px; border: 1px solid #23506d; background: #0c1e2e; color: #e8f1ff; padding: 10px 13px; border-radius: 8px; }
@@ -59,6 +55,13 @@
 .legendCandle { color: #b9cce0; }.legendFast { color: #67d8ff; }.legendSlow { color: #ffb45c; }.legendEntry { color: #ffe16a; }.legendStop { color: #ff6f80; }.legendCurrent { color: #73f0aa; }
 @media (max-width: 600px) {
   .settingsGrid { grid-template-columns: 1fr; }
+  .settingsCard { padding: 13px; }
+  .settingsCard input, .settingsCard select { min-height: 46px; font-size: 16px; }
   .buttonRow button { flex: 1; }
-  .strategyChartWrap { height: 400px; }
+  .strategyToolbar { align-items: stretch; }
+  .strategyToolbar label, .strategyToolbar select { width: 100%; min-width: 0; }
+  .strategyToolbar select { min-height: 46px; font-size: 15px; }
+  .strategyChartWrap { height: 360px; min-height: 320px; }
+  .strategyDecision, .strategyManagement { padding: 10px; font-size: 12px; line-height: 1.5; }
+  .strategyLegend { gap: 7px 11px; }
 }
