@@ -5,6 +5,7 @@ import static com.keytrins.zonemonitor.MarketModels.Zone;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -14,6 +15,8 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.widget.FrameLayout;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -44,6 +47,7 @@ public final class MainActivity extends Activity {
     private TextView detailLine;
     private ProgressBar progress;
     private boolean resumed;
+    private Snapshot currentSnapshot;
 
     private final Runnable periodicRefresh = new Runnable() {
         @Override public void run() {
@@ -121,11 +125,34 @@ public final class MainActivity extends Activity {
         }
         root.addView(pairs, margin(-1, dp(38), 0, 0, 0, dp(12)));
 
-        LinearLayout chartCard = column();
+        FrameLayout chartCard = new FrameLayout(this);
         chartCard.setBackground(rounded(0xFF091522, 14));
         chart = new ZoneChartView(this);
-        chartCard.addView(chart, new LinearLayout.LayoutParams(-1, dp(470)));
+        chartCard.addView(chart, new FrameLayout.LayoutParams(-1, -1));
+
+        LinearLayout chartActions = row();
+        chartActions.setPadding(dp(4), dp(4), dp(4), dp(4));
+        chartActions.setBackground(rounded(0xDD101E2B, 12));
+        Button reset = button("1:1", 0x00101E2B, 0xFFD5E3EC);
+        reset.setTextSize(10);
+        reset.setContentDescription("Сбросить масштаб графика");
+        reset.setOnClickListener(v -> chart.resetViewport());
+        chartActions.addView(reset, new LinearLayout.LayoutParams(dp(46), dp(34)));
+        Button fullscreen = button("⛶", 0x00101E2B, 0xFF6EE7F9);
+        fullscreen.setTextSize(18);
+        fullscreen.setContentDescription("Открыть график на весь экран");
+        fullscreen.setOnClickListener(v -> showFullScreenChart());
+        chartActions.addView(fullscreen, new LinearLayout.LayoutParams(dp(42), dp(34)));
+        FrameLayout.LayoutParams actionParams = new FrameLayout.LayoutParams(dp(96), dp(42),
+                Gravity.TOP | Gravity.RIGHT);
+        actionParams.setMargins(0, dp(7), dp(7), 0);
+        chartCard.addView(chartActions, actionParams);
         root.addView(chartCard, margin(-1, dp(470), 0, 0, 0, dp(12)));
+
+        TextView gestureHint = text("Два пальца — масштаб  ·  Проведи — история  ·  Двойное касание — сброс",
+                9, 0xFF64788A, Typeface.NORMAL);
+        gestureHint.setGravity(Gravity.CENTER);
+        root.addView(gestureHint, margin(-1, dp(28), 0, -8, 0, 9));
 
         LinearLayout signalCard = column();
         signalCard.setPadding(dp(14), dp(13), dp(14), dp(13));
@@ -196,6 +223,7 @@ public final class MainActivity extends Activity {
 
     private void render(Snapshot snapshot) {
         progress.setVisibility(View.GONE);
+        currentSnapshot = snapshot;
         sourceBadge.setText(snapshot.source);
         int badge = "DEMO".equals(snapshot.source) ? 0xFFF5C451 :
                 (snapshot.source.contains("MT5") ? 0xFFB58CFF : 0xFF34D399);
@@ -211,6 +239,51 @@ public final class MainActivity extends Activity {
                 format(resistance.low, digits) + "–" + format(resistance.high, digits) + "  Q" + resistance.score);
         detailLine.setText("Цена " + format(snapshot.price, digits) + "  ·  зон " +
                 snapshot.zones.size() + "  ·  " + snapshot.updatedAt);
+    }
+
+    private void showFullScreenChart() {
+        if (currentSnapshot == null) {
+            Toast.makeText(this, "Сначала дождитесь загрузки графика", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Dialog dialog = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        LinearLayout root = column();
+        root.setBackgroundColor(0xFF071019);
+
+        LinearLayout header = row();
+        header.setPadding(dp(14), dp(6), dp(8), dp(6));
+        String pair = symbol.substring(0, 3) + "/" + symbol.substring(3) + "  ·  M15";
+        TextView title = text(pair + "  ·  МАСШТАБ", 15, 0xFFF1F6FA, Typeface.BOLD);
+        header.addView(title, new LinearLayout.LayoutParams(0, dp(42), 1));
+        Button reset = button("1:1", 0xFF172635, 0xFFD5E3EC);
+        header.addView(reset, new LinearLayout.LayoutParams(dp(52), dp(38)));
+        Button close = button("✕", 0xFF172635, 0xFFFF98A8);
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(dp(48), dp(38));
+        closeParams.setMargins(dp(7), 0, 0, 0);
+        header.addView(close, closeParams);
+        root.addView(header, new LinearLayout.LayoutParams(-1, dp(54)));
+
+        ZoneChartView fullChart = new ZoneChartView(this);
+        fullChart.setSnapshot(currentSnapshot);
+        fullChart.setInitialVisibleBars(48);
+        root.addView(fullChart, new LinearLayout.LayoutParams(-1, 0, 1));
+        TextView hint = text("Щипок — увеличить/уменьшить  ·  Проведи — перемотать  ·  Поверни телефон — широкий график",
+                9, 0xFF8294A8, Typeface.NORMAL);
+        hint.setGravity(Gravity.CENTER);
+        root.addView(hint, new LinearLayout.LayoutParams(-1, dp(30)));
+
+        reset.setOnClickListener(v -> fullChart.resetViewport());
+        close.setOnClickListener(v -> dialog.dismiss());
+        dialog.setContentView(root);
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN |
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+        }
+        dialog.show();
+        if (window != null) window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT);
     }
 
     private Zone nearest(Snapshot snapshot, boolean support) {

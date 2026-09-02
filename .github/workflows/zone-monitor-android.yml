@@ -30,10 +30,10 @@ jobs:
       - name: Collect signer
         run: |
           mkdir -p zone-monitor-android/dist
-          cp zone-monitor-android/app/build/outputs/apk/release/app-release-unsigned.apk zone-monitor-android/dist/ZoneMonitor-v0.1.0-unsigned.apk
+          cp zone-monitor-android/app/build/outputs/apk/release/app-release-unsigned.apk zone-monitor-android/dist/ZoneMonitor-v0.1.1-unsigned.apk
           cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" zone-monitor-android/dist/apksigner.jar
       - uses: actions/upload-artifact@v4
         with:
-          name: zone-monitor-v0.1.0-build
+          name: zone-monitor-v0.1.1-build
           path: zone-monitor-android/dist/*
           retention-days: 3
