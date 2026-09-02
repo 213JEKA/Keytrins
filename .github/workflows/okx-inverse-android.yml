@@ -52,7 +52,7 @@ jobs:
         run: |
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 \
             okx-inverse-android/app/build/outputs/apk/release/app-release-unsigned.apk \
-            okx-inverse-android/app/build/outputs/apk/release/OKX-Inverse-v0.1.1-aligned-unsigned.apk
+            okx-inverse-android/app/build/outputs/apk/release/OKX-Inverse-v0.1.2-aligned-unsigned.apk
 
       - name: Restore private signing key
         if: env.HAS_SIGNING_KEY == 'true'
@@ -72,30 +72,30 @@ jobs:
             --ks-key-alias "$KEY_ALIAS" \
             --ks-pass env:KS_PASS \
             --key-pass env:KEY_PASS \
-            --out okx-inverse-android/app/build/outputs/apk/release/OKX-Inverse-v0.1.1-signed.apk \
-            okx-inverse-android/app/build/outputs/apk/release/OKX-Inverse-v0.1.1-aligned-unsigned.apk
+            --out okx-inverse-android/app/build/outputs/apk/release/OKX-Inverse-v0.1.2-signed.apk \
+            okx-inverse-android/app/build/outputs/apk/release/OKX-Inverse-v0.1.2-aligned-unsigned.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs \
-            okx-inverse-android/app/build/outputs/apk/release/OKX-Inverse-v0.1.1-signed.apk
-          sha256sum okx-inverse-android/app/build/outputs/apk/release/OKX-Inverse-v0.1.1-signed.apk
+            okx-inverse-android/app/build/outputs/apk/release/OKX-Inverse-v0.1.2-signed.apk
+          sha256sum okx-inverse-android/app/build/outputs/apk/release/OKX-Inverse-v0.1.2-signed.apk
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: OKX-Inverse-v0.1.1-debug
+          name: OKX-Inverse-v0.1.2-debug
           path: okx-inverse-android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
       - name: Upload aligned unsigned release APK
         uses: actions/upload-artifact@v4
         with:
-          name: OKX-Inverse-v0.1.1-aligned-unsigned
-          path: okx-inverse-android/app/build/outputs/apk/release/OKX-Inverse-v0.1.1-aligned-unsigned.apk
+          name: OKX-Inverse-v0.1.2-aligned-unsigned
+          path: okx-inverse-android/app/build/outputs/apk/release/OKX-Inverse-v0.1.2-aligned-unsigned.apk
           if-no-files-found: error
 
       - name: Upload stable signed release APK
         if: env.HAS_SIGNING_KEY == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: OKX-Inverse-v0.1.1-signed
-          path: okx-inverse-android/app/build/outputs/apk/release/OKX-Inverse-v0.1.1-signed.apk
+          name: OKX-Inverse-v0.1.2-signed
+          path: okx-inverse-android/app/build/outputs/apk/release/OKX-Inverse-v0.1.2-signed.apk
           if-no-files-found: error
