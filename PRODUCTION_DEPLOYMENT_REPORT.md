@@ -162,3 +162,35 @@ exchange position, an active foreign writer, and a quiet-but-unconfirmed writer 
 The remaining blocker is external to this deployment: stop the legacy OKX trading client (very likely the previous
 Android/Live Research runtime) or replace/restrict the OKX API key so only `37.252.21.226` can use it, then bring OKX
 flat. Until that is done, the three-exchange LIVE gate must remain disarmed.
+
+## 2026-09-02 v1.2.0 independent exchange execution update
+
+The runtime now converts each accepted OKX strategy signal into one immutable canonical intent and three explicit,
+independently executed exchange tasks.  OKX remains the only signal source; Bybit and KuCoin do not generate signals.
+Each exchange task obtains its own current quote, instrument rules, account fee and available margin before submitting
+the same asset and direction.  Symbol conversion is deterministic, including `BTC-USDT-SWAP` to `BTCUSDT` on Bybit
+and `XBTUSDTM` on KuCoin Futures.  A rejection or technical precheck failure on one exchange does not suppress the
+other two tasks.
+
+Position sizing is now a user-visible fixed notional per exchange (`PositionNotionalUsdt`, initially `100 USDT`) and
+is independent of OKX's structural stop distance.  The initial exchange stop and subsequent per-exchange position
+management retain the existing fee-aware NET math, current remaining quantity, monotonic Dollar Lock and reduce-only
+exit behavior.  The configured maximum expected NET loss is `1.50 USDT` per position.  If tick size, fees, local price,
+instrument limits or available margin cannot support that protection, only that exchange's entry is rejected before
+mutation.  `OkxStrategyCore`, signal generation and the Dollar Lock staircase were not changed.
+
+Verification and rollout:
+
+- Release build: zero warnings and zero errors.
+- Automated tests: `86 PASS / 0 FAIL`.
+- JavaScript syntax check and `git diff --check`: pass.
+- Server installed as `/opt/keytrins-multi-exchange-release25`; runtime version `1.2.0`.
+- Installed Core DLL SHA-256: `47585a102082a628133e179543d0ab2622f1120c6c48be800da53493d4ec898c`.
+- Installed Service DLL SHA-256: `cfb580f96bdb813e96b07bf73830ebf53b140b2e49a9a742ef430e3fa316b090`.
+- Windows Terminal release 25 was installed and its launcher hash matched the published artifact.
+- The first service start attempt failed with systemd `203/EXEC` because the Windows-created archive did not retain
+  the Linux executable bit.  Setting the intended service file to mode `750` resolved it; application code had not
+  run during those failed attempts.
+- Post-restart health: `status=ready`, `executionRecovery=READY`, unresolved execution/risk actions `0/0`.
+- Post-restart exchange truth: OKX, Bybit and KuCoin Futures all flat.
+- All three exchange modes remained `Off`; the deployment did not enable entries or submit an order.
