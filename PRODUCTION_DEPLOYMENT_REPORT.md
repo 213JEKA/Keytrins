@@ -194,3 +194,35 @@ Verification and rollout:
 - Post-restart health: `status=ready`, `executionRecovery=READY`, unresolved execution/risk actions `0/0`.
 - Post-restart exchange truth: OKX, Bybit and KuCoin Futures all flat.
 - All three exchange modes remained `Off`; the deployment did not enable entries or submit an order.
+
+## 2026-09-02 v1.2.1 fee-aware break-even staircase
+
+The per-exchange profit protection staircase was changed at the operator's request.  It is based on each position's
+peak estimated NET profit, not the asset price:
+
+- below `+1.00 USDT`: no Dollar Lock step;
+- at `+1.00 USDT`: true fee-aware break-even, protected NET `0.00 USDT`;
+- at `+1.50 USDT`: protected NET `+1.00 USDT`;
+- at `+2.00 USDT`: protected NET `+1.50 USDT`;
+- every subsequent `+0.50 USDT` of peak advances protected NET by `+0.50 USDT`.
+
+The break-even stop is calculated independently from each exchange's persisted entry fee and current taker fee,
+including spread, configured slippage allowance and exchange tick rounding.  Remaining quantity is still used after a
+partial reduction, and an existing exchange stop is never loosened.  Signal generation, entry selection, fixed
+position notional, the `1.50 USDT` maximum NET-loss limit and reduce-only close behavior were not changed.
+
+New entries were paused while the existing three-exchange FIL cycle continued under v1.2.0.  The operator then tested
+the batch close-and-disable command; all three positions became exchange-flat and all modes became `Off`, with zero
+unresolved execution and risk actions.  Version 1.2.1 was deployed only after that flat boundary.
+
+Verification:
+
+- automated tests: `100 PASS / 0 FAIL`;
+- runtime: `status=ready`, version `1.2.1`, recovery `READY`;
+- PostgreSQL/runtime projection and exchange truth: zero positions on all three exchanges;
+- unresolved execution/risk actions: `0/0`;
+- exchange modes after deployment: OKX, Bybit and KuCoin Futures all `Off`;
+- server API exposes the new `1.00→0.00`, `1.50→1.00`, `2.00→1.50`, `2.50→2.00` ladder;
+- installed Core DLL SHA-256: `f01dc14f15d9c76b9a9da7f6c0899bf4def3adeae9a99f42d7510d790c0d8220`;
+- installed Service DLL SHA-256: `b5d0a5f9ea4982d856d67a134c2ab1a79965271495d83437ef9d7a299f60ff6f`;
+- post-deployment systemd warning journal: empty.
