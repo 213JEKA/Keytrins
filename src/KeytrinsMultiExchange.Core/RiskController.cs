@@ -34,9 +34,8 @@ public static class RiskController
 
     public static decimal ProtectedProfitForPeak(decimal peakNet)
     {
-        if (peakNet < 1.30m) return 0m;
-        if (peakNet < 2.00m) return 1.00m;
-        return 1.50m + decimal.Floor((peakNet - 2.00m) / 0.50m) * 0.50m;
+        if (peakNet < 1.50m) return 0m;
+        return 1.00m + decimal.Floor((peakNet - 1.50m) / 0.50m) * 0.50m;
     }
 
     public static decimal MoreProtective(TradeDirection direction, decimal first, decimal second) =>

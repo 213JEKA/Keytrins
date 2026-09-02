@@ -145,10 +145,10 @@ app.MapGet("/api/strategy/chart", (string symbol, RuntimeSnapshot state, Runtime
             maxNetLossUsdt = settings.Current.MaxNetLossUsdt,
             dollarLock = new[]
             {
-                new { peakNet = 1.30m, protectedNet = 1.00m },
+                new { peakNet = 1.00m, protectedNet = 0.00m },
+                new { peakNet = 1.50m, protectedNet = 1.00m },
                 new { peakNet = 2.00m, protectedNet = 1.50m },
-                new { peakNet = 2.50m, protectedNet = 2.00m },
-                new { peakNet = 3.00m, protectedNet = 2.50m }
+                new { peakNet = 2.50m, protectedNet = 2.00m }
             },
             semantics = "HOLD_UNTIL_MAX_NET_LOSS_OR_PROTECTED_STOP"
         }

@@ -9,8 +9,8 @@ public sealed class PositionManagerTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "keytrins-position-tests-" + Guid.NewGuid().ToString("N"));
 
     [Theory]
-    [InlineData("Long", "101.502", "1.00")]
-    [InlineData("Short", "98.499", "1.00")]
+    [InlineData("Long", "101.702", "1.00")]
+    [InlineData("Short", "98.299", "1.00")]
     [InlineData("Long", "102.203", "1.50")]
     [InlineData("Long", "110.212", "9.50")]
     public void Profit_staircase_uses_net_peak_and_never_loosens(string directionText, string markText, string protectedText)
@@ -25,6 +25,73 @@ public sealed class PositionManagerTests : IDisposable
         var estimated = RiskController.EstimateNetPnl(direction, updated.EntryPrice, desired,
             updated.RemainingQuantity * updated.ContractValue, updated.EntryFee, updated.TakerFeeRate);
         Assert.True(estimated >= updated.ProtectedNetProfitUsdt);
+    }
+
+    [Theory]
+    [InlineData("0.99", "0.00")]
+    [InlineData("1.00", "0.00")]
+    [InlineData("1.49", "0.00")]
+    [InlineData("1.50", "1.00")]
+    [InlineData("1.99", "1.00")]
+    [InlineData("2.00", "1.50")]
+    [InlineData("2.50", "2.00")]
+    [InlineData("9.10", "8.50")]
+    public void New_profit_staircase_has_break_even_at_one_and_half_dollar_lag_after_one_fifty(
+        string peakText, string protectedText)
+    {
+        var peak = decimal.Parse(peakText, System.Globalization.CultureInfo.InvariantCulture);
+        var expected = decimal.Parse(protectedText, System.Globalization.CultureInfo.InvariantCulture);
+
+        Assert.Equal(expected, RiskController.ProtectedProfitForPeak(peak));
+    }
+
+    [Theory]
+    [InlineData("Long", "0.0005")]
+    [InlineData("Long", "0.0010")]
+    [InlineData("Short", "0.0005")]
+    [InlineData("Short", "0.0010")]
+    public void One_dollar_peak_arms_exchange_specific_true_net_break_even(string directionText, string feeText)
+    {
+        var direction = Enum.Parse<TradeDirection>(directionText);
+        var fee = decimal.Parse(feeText, System.Globalization.CultureInfo.InvariantCulture);
+        var position = Position(direction) with
+        {
+            TakerFeeRate = fee,
+            EntryFee = 100m * fee,
+            PeakNetProfitUsdt = 1.00m,
+            ProtectedNetProfitUsdt = 0m,
+            CurrentStop = direction == TradeDirection.Long ? 99m : 101m
+        };
+
+        var desired = PositionManager.DesiredStop(position, Options().ExecutionSlippageBufferBps);
+        var estimated = RiskController.EstimateNetPnl(direction, position.EntryPrice, desired,
+            position.RemainingQuantity * position.ContractValue, position.EntryFee, position.TakerFeeRate);
+
+        Assert.True(estimated >= 0m);
+        Assert.False(RiskController.WouldLoosen(direction, position.CurrentStop, desired));
+    }
+
+    [Theory]
+    [InlineData("Long")]
+    [InlineData("Short")]
+    public void Break_even_price_changes_with_each_exchange_fee(string directionText)
+    {
+        var direction = Enum.Parse<TradeDirection>(directionText);
+        var lowerFee = Position(direction) with
+        {
+            TakerFeeRate = 0.0005m,
+            EntryFee = 0.05m,
+            PeakNetProfitUsdt = 1.00m,
+            ProtectedNetProfitUsdt = 0m,
+            CurrentStop = direction == TradeDirection.Long ? 99m : 101m
+        };
+        var higherFee = lowerFee with { TakerFeeRate = 0.0010m, EntryFee = 0.10m };
+
+        var lowerFeeStop = PositionManager.DesiredStop(lowerFee, Options().ExecutionSlippageBufferBps);
+        var higherFeeStop = PositionManager.DesiredStop(higherFee, Options().ExecutionSlippageBufferBps);
+
+        if (direction == TradeDirection.Long) Assert.True(higherFeeStop > lowerFeeStop);
+        else Assert.True(higherFeeStop < lowerFeeStop);
     }
 
     [Fact]

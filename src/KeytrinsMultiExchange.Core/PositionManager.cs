@@ -297,7 +297,9 @@ public sealed class PositionManager
     {
         var desired = RiskController.MoreProtective(position.Direction, position.MirroredStrategyStop,
             position.HardLossStop);
-        if (position.ProtectedNetProfitUsdt > 0m)
+        // The first protection step is true fee-aware break-even (desired NET = 0), so peak state
+        // distinguishes an armed break-even from a position that has not reached +1 USDT yet.
+        if (position.PeakNetProfitUsdt >= 1.00m)
         {
             var dollar = RiskController.RequiredStopForNet(position.Direction, position.EntryPrice,
                 position.RemainingQuantity * position.ContractValue, position.EntryFee, position.TakerFeeRate,
