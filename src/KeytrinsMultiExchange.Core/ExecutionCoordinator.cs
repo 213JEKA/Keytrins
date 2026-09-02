@@ -32,15 +32,22 @@ public sealed class ExecutionCoordinator
     public async Task<IReadOnlyList<RouteAttempt>> RouteParallelAsync(CanonicalSignal signal,
         RuntimeOptions options, CancellationToken cancellationToken)
     {
+        var intent = new CanonicalTradeIntent(signal, options, DateTimeOffset.UtcNow);
         return await Task.WhenAll(
-            RouteSafelyAsync(ExchangeId.Okx, signal, options, cancellationToken),
-            RouteSafelyAsync(ExchangeId.Bybit, signal, options, cancellationToken),
-            RouteSafelyAsync(ExchangeId.KuCoinFutures, signal, options, cancellationToken));
+            RouteSafelyAsync(new(ExchangeId.Okx, intent), cancellationToken),
+            RouteSafelyAsync(new(ExchangeId.Bybit, intent), cancellationToken),
+            RouteSafelyAsync(new(ExchangeId.KuCoinFutures, intent), cancellationToken));
     }
 
     public async Task<RouteAttempt> RouteAsync(ExchangeId exchange, CanonicalSignal signal, RuntimeOptions options,
         CancellationToken cancellationToken)
+        => await RouteTaskAsync(new(exchange, new(signal, options, DateTimeOffset.UtcNow)), cancellationToken);
+
+    public async Task<RouteAttempt> RouteTaskAsync(ExchangeTradeTask task, CancellationToken cancellationToken)
     {
+        var exchange = task.Exchange;
+        var signal = task.Intent.Signal;
+        var options = task.Intent.ExecutionPolicy;
         var received = DateTimeOffset.UtcNow;
         if (!options.Exchanges.TryGetValue(exchange.ToString(), out var mode) || mode != ExchangeMode.Active)
             return Skip(exchange, signal, received, "EXCHANGE_PAUSED");
@@ -344,16 +351,15 @@ public sealed class ExecutionCoordinator
     private static RouteAttempt Skip(ExchangeId exchange, CanonicalSignal signal, DateTimeOffset received, string reason) =>
         new(exchange, signal.SignalId, received, null, null, RouteResult.Skipped, reason);
 
-    private async Task<RouteAttempt> RouteSafelyAsync(ExchangeId exchange, CanonicalSignal signal,
-        RuntimeOptions options, CancellationToken cancellationToken)
+    private async Task<RouteAttempt> RouteSafelyAsync(ExchangeTradeTask task, CancellationToken cancellationToken)
     {
-        try { return await RouteAsync(exchange, signal, options, cancellationToken); }
+        try { return await RouteTaskAsync(task, cancellationToken); }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception exception)
         {
             await _database.AppendLogAsync("ROUTE_ERROR", exception.GetType().Name + ":" + exception.Message,
-                exchange.ToString(), signal.SignalId, cancellationToken);
-            return new RouteAttempt(exchange, signal.SignalId, DateTimeOffset.UtcNow, null, null,
+                task.Exchange.ToString(), task.Intent.Signal.SignalId, cancellationToken);
+            return new RouteAttempt(task.Exchange, task.Intent.Signal.SignalId, DateTimeOffset.UtcNow, null, null,
                 RouteResult.Unknown, "UNHANDLED_ROUTE_ERROR_" + exception.GetType().Name);
         }
     }

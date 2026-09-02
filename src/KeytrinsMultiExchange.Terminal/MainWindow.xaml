@@ -37,7 +37,8 @@
           <Border Background="#08131F" BorderBrush="#193B54" BorderThickness="1" CornerRadius="12" Padding="18"><StackPanel>
             <TextBlock Text="Основные настройки" FontSize="21" FontWeight="SemiBold"/>
             <TextBlock Text="Рабочие параметры хранятся на сервере и применяются ко всем выбранным биржам." Foreground="#7892AA" TextWrapping="Wrap" Margin="0,5,0,14"/>
-            <TextBlock Text="Расчётный риск для размера позиции, USDT"/><TextBox x:Name="RiskUsdtInput" Margin="0,4,0,11"/>
+            <TextBlock Text="Сумма позиции на каждой бирже, USDT"/><TextBox x:Name="PositionNotionalUsdtInput" Margin="0,4,0,11"/>
+            <TextBlock Text="Расчётный риск стратегии, USDT" Visibility="Collapsed"/><TextBox x:Name="RiskUsdtInput" Visibility="Collapsed"/>
             <TextBlock Text="Аварийный лимит NET-убытка на одну позицию, USDT"/><TextBox x:Name="MaxNetLossUsdtInput" Margin="0,4,0,5"/>
             <TextBlock Text="Учитывает комиссии входа/выхода, спред и запас проскальзывания. Если безопасный биржевой стоп нельзя поставить за текущей ценой, вход будет пропущен." Foreground="#7892AA" TextWrapping="Wrap" Margin="0,0,0,11"/>
             <TextBlock Text="Количество анализируемых пар"/><TextBox x:Name="UniverseSizeInput" Margin="0,4,0,11"/>

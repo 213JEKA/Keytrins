@@ -13,7 +13,7 @@ public sealed class EntryPlannerTests
         var rules = new InstrumentRules(quote.Symbol, 0.001m, 1m, 1m, 100000m, 5m, 0.1m);
         var plan = EntryPlanner.Plan(ExchangeId.Okx, signal, quote.Symbol, quote, rules, 0.001m, Options());
         Assert.Equal(TradeDirection.Short, plan.Direction);
-        Assert.Equal(decimal.Floor((3m / (5.20m * 0.02m)) / 0.1m), plan.Quantity);
+        Assert.Equal(decimal.Floor((100m / 5.20m) / 0.1m), plan.Quantity);
         Assert.True(plan.InitialStop > quote.Ask);
         var baseQuantity = plan.Quantity * rules.ContractValue;
         var entryFee = plan.ReferencePrice * baseQuantity * plan.TakerFeeRate;
@@ -57,7 +57,8 @@ public sealed class EntryPlannerTests
 
     private static RuntimeOptions Options() => new()
     {
-        RiskUsdt = 3m, MaxNetLossUsdt = 0.50m, MaxNotionalUsdt = 1000m, MaxCostR = 0.25m,
+        RiskUsdt = 3m, PositionNotionalUsdt = 100m, MaxNetLossUsdt = 1.50m,
+        MaxNotionalUsdt = 1000m, MaxCostR = 0.25m,
         ExecutionSlippageBufferBps = 2m
     };
 }

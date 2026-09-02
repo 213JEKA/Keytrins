@@ -16,6 +16,12 @@ public static class RouteReasonCatalog
             return "Аккаунт или контракт не находится в обязательном One-Way режиме.";
         if (reason.Equals("FEE_RATE_UNAVAILABLE", StringComparison.OrdinalIgnoreCase))
             return "Не удалось получить подтверждённую актуальную комиссию. LIVE-вход заблокирован.";
+        if (reason.Equals("AVAILABLE_MARGIN_UNVERIFIED", StringComparison.OrdinalIgnoreCase))
+            return "Биржа не вернула подтверждённую доступную маржу. Вход на этой бирже не отправлялся.";
+        if (reason.Equals("INSUFFICIENT_AVAILABLE_MARGIN_PRECHECK", StringComparison.OrdinalIgnoreCase))
+            return "На этой бирже недостаточно доступной маржи для выбранной суммы позиции, комиссии и лимита убытка.";
+        if (reason.Equals("POSITION_NOTIONAL_INVALID", StringComparison.OrdinalIgnoreCase))
+            return "Сумма позиции должна быть задана положительным числом. Заявка не отправлялась.";
         if (reason.Equals("COST_R", StringComparison.OrdinalIgnoreCase))
             return "Оценочные комиссии и спред превысили разрешённый Max Cost/R.";
         if (reason.Equals("QTY_MIN", StringComparison.OrdinalIgnoreCase))

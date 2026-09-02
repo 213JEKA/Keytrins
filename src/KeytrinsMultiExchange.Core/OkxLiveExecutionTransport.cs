@@ -40,7 +40,7 @@ public sealed class OkxLiveExecutionTransport(
     public async Task<PreparedEntry> PrepareEntryAsync(CanonicalSignal signal, RuntimeOptions options,
         CancellationToken cancellationToken)
     {
-        var symbol = signal.Symbol;
+        var symbol = ExchangeSymbolMapper.Map(Id, signal.Symbol);
         using var positions = await PrivateGetAsync("/api/v5/account/positions?instId=" + Escape(symbol), cancellationToken);
         if (positions.RootElement.GetProperty("data").EnumerateArray().Any(x => Math.Abs(Decimal(x, "pos")) > 0m))
             throw new ExecutionRejectedException("POSITION_ALREADY_OPEN");
@@ -82,7 +82,16 @@ public sealed class OkxLiveExecutionTransport(
         if (fee <= 0m) fee = Math.Abs(Decimal(feeItem, "takerU"));
         if (fee <= 0m) fee = Math.Abs(Decimal(feeItem, "taker"));
         if (fee <= 0m) throw new ExecutionRejectedException("FEE_RATE_UNAVAILABLE");
-        return EntryPlanner.Plan(Id, signal, symbol, quote, rules, fee, options);
+        var entry = EntryPlanner.Plan(Id, signal, symbol, quote, rules, fee, options);
+        using var balanceDocument = await PrivateGetAsync("/api/v5/account/balance?ccy=USDT", cancellationToken);
+        var available = 0m;
+        var balances = balanceDocument.RootElement.GetProperty("data");
+        if (balances.GetArrayLength() > 0 && balances[0].TryGetProperty("details", out var details))
+            foreach (var detail in details.EnumerateArray())
+                if (Text(detail, "ccy").Equals("USDT", StringComparison.OrdinalIgnoreCase))
+                { available = Positive(detail, "availBal", Positive(detail, "availEq")); break; }
+        ExecutionBudget.RequireAvailableMargin(entry, options, available);
+        return entry;
     }
 
     public async Task<MutationReceipt> SubmitEntryAsync(PreparedEntry entry, CancellationToken cancellationToken)
@@ -161,6 +170,12 @@ public sealed class OkxLiveExecutionTransport(
                 decimal stop = 0m; string? stopId = null;
                 if (item.TryGetProperty("closeOrderAlgo", out var algos) && algos.ValueKind == JsonValueKind.Array && algos.GetArrayLength() > 0)
                 { stop = Decimal(algos[0], "slTriggerPx"); stopId = Text(algos[0], "algoId"); }
+                if (stop <= 0m)
+                {
+                    var pending = await FindProtectiveStopAsync(symbol,
+                        signed > 0 ? TradeDirection.Long : TradeDirection.Short, cancellationToken);
+                    stop = pending.Price; stopId = pending.Id;
+                }
                 position = new(symbol, signed > 0 ? TradeDirection.Long : TradeDirection.Short, Math.Abs(signed),
                     Decimal(item, "avgPx"), Decimal(item, "markPx"), stop, stopId,
                     Text(item, "posSide").Equals("net", StringComparison.OrdinalIgnoreCase), DateTimeOffset.UtcNow);
@@ -226,10 +241,35 @@ public sealed class OkxLiveExecutionTransport(
             decimal stop = 0; string? stopId = null;
             if (item.TryGetProperty("closeOrderAlgo", out var algos) && algos.ValueKind == JsonValueKind.Array && algos.GetArrayLength() > 0)
             { stop = Decimal(algos[0], "slTriggerPx"); stopId = Text(algos[0], "algoId"); }
+            if (stop <= 0m)
+            {
+                var pending = await FindProtectiveStopAsync(Text(item, "instId"),
+                    signed > 0 ? TradeDirection.Long : TradeDirection.Short, cancellationToken);
+                stop = pending.Price; stopId = pending.Id;
+            }
             output.Add(new(Text(item, "instId"), signed > 0 ? TradeDirection.Long : TradeDirection.Short, Math.Abs(signed),
                 Decimal(item, "avgPx"), Decimal(item, "markPx"), stop, stopId, Text(item, "posSide") == "net", DateTimeOffset.UtcNow));
         }
         return output;
+    }
+
+    private async Task<(string? Id, decimal Price)> FindProtectiveStopAsync(string symbol,
+        TradeDirection direction, CancellationToken cancellationToken)
+    {
+        using var document = await PrivateGetAsync(
+            $"/api/v5/trade/orders-algo-pending?ordType=conditional&instId={Escape(symbol)}", cancellationToken);
+        var closingSide = direction == TradeDirection.Long ? "sell" : "buy";
+        foreach (var item in document.RootElement.GetProperty("data").EnumerateArray())
+        {
+            var clientId = Text(item, "algoClOrdId");
+            if (clientId.Length == 0) clientId = Text(item, "attachAlgoClOrdId");
+            var stopPrice = Decimal(item, "slTriggerPx");
+            if (!Text(item, "side").Equals(closingSide, StringComparison.OrdinalIgnoreCase) ||
+                !Text(item, "posSide").Equals("net", StringComparison.OrdinalIgnoreCase) ||
+                !clientId.StartsWith("KXOkxS", StringComparison.OrdinalIgnoreCase) || stopPrice <= 0m) continue;
+            return (Text(item, "algoId"), stopPrice);
+        }
+        return (null, 0m);
     }
 
     private async Task<JsonDocument> PublicGetAsync(string path, CancellationToken cancellationToken)

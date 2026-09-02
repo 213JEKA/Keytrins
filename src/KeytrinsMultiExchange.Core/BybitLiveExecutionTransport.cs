@@ -16,7 +16,7 @@ public sealed class BybitLiveExecutionTransport(HttpClient http, Func<ExchangeId
     public async Task<PreparedEntry> PrepareEntryAsync(CanonicalSignal signal, RuntimeOptions options,
         CancellationToken cancellationToken)
     {
-        var symbol = signal.Symbol.Split('-')[0] + "USDT";
+        var symbol = ExchangeSymbolMapper.Map(Id, signal.Symbol);
         using var positionDocument = await PrivateGetAsync("/v5/position/list", $"category=linear&symbol={Escape(symbol)}", cancellationToken);
         var positions = positionDocument.RootElement.GetProperty("result").GetProperty("list");
         if (positions.EnumerateArray().Any(x => Decimal(x, "size") > 0m)) throw new ExecutionRejectedException("POSITION_ALREADY_OPEN");
@@ -49,7 +49,21 @@ public sealed class BybitLiveExecutionTransport(HttpClient http, Func<ExchangeId
         var fees = feeDocument.RootElement.GetProperty("result").GetProperty("list");
         if (fees.GetArrayLength() == 0) throw new ExecutionRejectedException("FEE_RATE_UNAVAILABLE");
         var fee = Math.Abs(Decimal(fees[0], "takerFeeRate"));
-        return EntryPlanner.Plan(Id, signal, symbol, quote, rules, fee, options);
+        var entry = EntryPlanner.Plan(Id, signal, symbol, quote, rules, fee, options);
+        using var balanceDocument = await PrivateGetAsync("/v5/account/wallet-balance",
+            "accountType=UNIFIED&coin=USDT", cancellationToken);
+        var available = 0m;
+        var accounts = balanceDocument.RootElement.GetProperty("result").GetProperty("list");
+        if (accounts.GetArrayLength() > 0)
+        {
+            var account = accounts[0]; available = Decimal(account, "totalAvailableBalance");
+            if (available <= 0m && account.TryGetProperty("coin", out var coins))
+                foreach (var coin in coins.EnumerateArray())
+                    if (Text(coin, "coin").Equals("USDT", StringComparison.OrdinalIgnoreCase))
+                    { available = Decimal(coin, "availableToWithdraw"); break; }
+        }
+        ExecutionBudget.RequireAvailableMargin(entry, options, available);
+        return entry;
     }
 
     public async Task<MutationReceipt> SubmitEntryAsync(PreparedEntry entry, CancellationToken cancellationToken)

@@ -6,6 +6,27 @@ namespace KeytrinsMultiExchange.Core.Tests;
 public sealed class RuntimeSettingsStoreTests
 {
     [Fact]
+    public void Migrates_old_settings_without_position_amount_to_safe_default()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"keytrins-settings-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, "runtime-settings.json"),
+                "{\"riskUsdt\":3,\"maxNetLossUsdt\":1.5,\"exchanges\":{}}");
+
+            var restored = new RuntimeSettingsStore(
+                new RuntimeOptions { PositionNotionalUsdt = 125m }, directory).Current;
+
+            Assert.Equal(100m, restored.PositionNotionalUsdt);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
     public void Persists_net_loss_limit_but_never_restores_live_admission_from_client_file()
     {
         var directory = Path.Combine(Path.GetTempPath(), $"keytrins-settings-{Guid.NewGuid():N}");
@@ -16,7 +37,7 @@ public sealed class RuntimeSettingsStoreTests
                 TradingEnabled = true,
                 OkxExclusiveWriterConfirmed = true
             }, directory);
-            original.Update(3m, 45, 5, 1000m, 0.25m, 1.75m);
+            original.Update(3m, 100m, 45, 5, 1000m, 0.25m, 1.75m);
             original.SetExchangeMode(ExchangeId.Okx, ExchangeMode.Active);
 
             var restored = new RuntimeSettingsStore(new RuntimeOptions
@@ -26,6 +47,7 @@ public sealed class RuntimeSettingsStoreTests
             }, directory).Current;
 
             Assert.Equal(1.75m, restored.MaxNetLossUsdt);
+            Assert.Equal(100m, restored.PositionNotionalUsdt);
             Assert.False(restored.TradingEnabled);
             Assert.False(restored.OkxExclusiveWriterConfirmed);
             Assert.Equal(ExchangeMode.Active, restored.Exchanges[ExchangeId.Okx.ToString()]);
@@ -45,7 +67,7 @@ public sealed class RuntimeSettingsStoreTests
         try
         {
             var store = new RuntimeSettingsStore(new RuntimeOptions(), directory);
-            Assert.Throws<ArgumentOutOfRangeException>(() => store.Update(3m, 45, 5, 1000m, 0.25m,
+            Assert.Throws<ArgumentOutOfRangeException>(() => store.Update(3m, 100m, 45, 5, 1000m, 0.25m,
                 decimal.Parse(value, System.Globalization.CultureInfo.InvariantCulture)));
         }
         finally

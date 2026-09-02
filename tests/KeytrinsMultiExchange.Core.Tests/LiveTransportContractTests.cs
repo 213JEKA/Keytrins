@@ -43,6 +43,7 @@ public sealed class LiveTransportContractTests
             "/api/v5/public/instruments" => Ok("{\"code\":\"0\",\"data\":[{\"state\":\"live\",\"ctType\":\"linear\",\"settleCcy\":\"USDT\",\"tickSz\":\"0.001\",\"lotSz\":\"1\",\"minSz\":\"1\",\"maxMktSz\":\"100000\",\"ctVal\":\"1\",\"groupId\":\"4\",\"instFamily\":\"UNI-USDT\"}]}"),
             "/api/v5/market/ticker" => Ok("{\"code\":\"0\",\"data\":[{\"bidPx\":\"5.20\",\"askPx\":\"5.21\",\"last\":\"5.205\"}]}"),
             "/api/v5/account/trade-fee" => Ok("{\"code\":\"0\",\"data\":[{\"feeGroup\":[{\"groupId\":\"4\",\"taker\":\"-0.001\"}]}]}"),
+            "/api/v5/account/balance" => Ok("{\"code\":\"0\",\"data\":[{\"details\":[{\"ccy\":\"USDT\",\"availBal\":\"100\"}]}]}"),
             _ => throw new InvalidOperationException(request.RequestUri.PathAndQuery)
         });
         var transport = new OkxLiveExecutionTransport(new HttpClient(handler), _ => Credentials);
@@ -90,6 +91,7 @@ public sealed class LiveTransportContractTests
             "/v5/account/instruments-info" => Ok("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[{\"status\":\"Trading\",\"settleCoin\":\"USDT\",\"priceFilter\":{\"tickSize\":\"0.001\"},\"lotSizeFilter\":{\"qtyStep\":\"1\",\"minOrderQty\":\"1\",\"maxMktOrderQty\":\"100000\",\"minNotionalValue\":\"5\"}}]}}"),
             "/v5/market/tickers" => Ok("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[{\"bid1Price\":\"5.20\",\"ask1Price\":\"5.21\",\"markPrice\":\"5.205\"}]}}"),
             "/v5/account/fee-rate" => Ok("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[{\"takerFeeRate\":\"0.001\"}]}}"),
+            "/v5/account/wallet-balance" => Ok("{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"list\":[{\"totalAvailableBalance\":\"100\",\"coin\":[{\"coin\":\"USDT\",\"availableToWithdraw\":\"100\"}]}]}}"),
             _ => throw new InvalidOperationException(request.RequestUri.PathAndQuery)
         });
         var transport = new BybitLiveExecutionTransport(new HttpClient(handler), _ => Credentials);
@@ -168,6 +170,75 @@ public sealed class LiveTransportContractTests
         Assert.Equal("MP", entry.RootElement.GetProperty("stopPriceType").GetString());
         Assert.Equal("5.1", entry.RootElement.GetProperty("triggerStopDownPrice").GetString());
         VerifyKuCoinSignature(orders[0]);
+    }
+
+    [Fact]
+    public async Task Kucoin_prepare_maps_btc_to_xbt_and_checks_its_own_available_margin()
+    {
+        var handler = new RouteHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/api/v1/positions" => Ok("{\"code\":\"200000\",\"data\":[]}"),
+            "/api/v2/position/getPositionMode" => Ok("{\"code\":\"200000\",\"data\":{\"positionMode\":0}}"),
+            "/api/v1/contracts/XBTUSDTM" => Ok("{\"code\":\"200000\",\"data\":{\"quoteCurrency\":\"USDT\",\"settleCurrency\":\"USDT\",\"isInverse\":false,\"supportCross\":true,\"marketStage\":\"NORMAL\",\"tickSize\":\"0.1\",\"lotSize\":\"1\",\"marketMaxOrderQty\":\"100000\",\"multiplier\":\"0.001\",\"markPrice\":\"50005\"}}"),
+            "/api/v1/ticker" => Ok("{\"code\":\"200000\",\"data\":{\"bestBidPrice\":\"50000\",\"bestAskPrice\":\"50010\"}}"),
+            "/api/v1/trade-fees" => Ok("{\"code\":\"200000\",\"data\":{\"takerFeeRate\":\"0.001\"}}"),
+            "/api/v1/account-overview" => Ok("{\"code\":\"200000\",\"data\":{\"availableBalance\":\"100\"}}"),
+            _ => throw new InvalidOperationException(request.RequestUri.PathAndQuery)
+        });
+        var transport = new KuCoinLiveExecutionTransport(new HttpClient(handler), _ => Credentials);
+        var signal = new CanonicalSignal("kucoin-btc-map", "OKX", "BTC-USDT-SWAP",
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), TradeDirection.Short, 50005, 49500,
+            505, 0.01, 100, 25, 1, "TEST", DateTimeOffset.UtcNow);
+        var options = new RuntimeOptions
+        {
+            PositionNotionalUsdt = 100m, MaxCostR = 1m, MaxNotionalUsdt = 1000m,
+            MaxNetLossUsdt = 1.5m, Leverage = 5
+        };
+
+        var entry = await transport.PrepareEntryAsync(signal, options, default);
+
+        Assert.Equal("XBTUSDTM", entry.Symbol);
+        Assert.Contains(handler.Requests, x => x.Path == "/api/v1/account-overview");
+    }
+
+    [Fact]
+    public async Task Kucoin_order_visibility_lag_still_reconciles_exchange_position_and_stop()
+    {
+        var handler = new RouteHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/api/v1/orders/byClientOid" => Ok("{\"code\":\"100001\",\"msg\":\"error.getOrder.orderNotExist\"}"),
+            "/api/v2/position" => Ok("{\"code\":\"200000\",\"data\":{\"symbol\":\"XRPUSDTM\",\"currentQty\":\"24\",\"avgEntryPrice\":\"1.33145\",\"markPrice\":\"1.33000\",\"realLeverage\":\"5\"}}"),
+            "/api/v1/stopOrders" => Ok("{\"code\":\"200000\",\"data\":{\"items\":[{\"id\":\"stop-1\",\"side\":\"sell\",\"reduceOnly\":true,\"stopPrice\":\"1.32709\"}]}}"),
+            _ => throw new InvalidOperationException(request.RequestUri.PathAndQuery)
+        });
+        var transport = new KuCoinLiveExecutionTransport(new HttpClient(handler), _ => Credentials);
+
+        var truth = await transport.ReconcileEntryAsync("XRPUSDTM", "KXKuCoinVisibility", default);
+
+        Assert.Equal(ExchangeOrderState.Missing, truth.Order.State);
+        Assert.NotNull(truth.Position);
+        Assert.Equal(1.32709m, truth.Position!.StopPrice);
+        Assert.Equal("stop-1", truth.Position.StopOrderId);
+    }
+
+    [Fact]
+    public async Task Okx_reconciliation_finds_attached_stop_in_pending_algo_truth()
+    {
+        var stopClientId = ExecutionIds.Stop(ExchangeId.Okx, "okx-stop-visibility", 0);
+        var handler = new RouteHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/api/v5/trade/order" => Ok("{\"code\":\"0\",\"data\":[{\"ordId\":\"entry-1\",\"state\":\"filled\",\"accFillSz\":\"10\",\"avgPx\":\"5.20\",\"fee\":\"-0.052\"}]}"),
+            "/api/v5/account/positions" => Ok("{\"code\":\"0\",\"data\":[{\"instId\":\"UNI-USDT-SWAP\",\"pos\":\"10\",\"avgPx\":\"5.20\",\"markPx\":\"5.21\",\"posSide\":\"net\",\"closeOrderAlgo\":[]}]}"),
+            "/api/v5/trade/orders-algo-pending" => Ok($"{{\"code\":\"0\",\"data\":[{{\"algoId\":\"algo-1\",\"algoClOrdId\":\"{stopClientId}\",\"side\":\"sell\",\"posSide\":\"net\",\"slTriggerPx\":\"5.10\"}}]}}"),
+            _ => throw new InvalidOperationException(request.RequestUri.PathAndQuery)
+        });
+        var transport = new OkxLiveExecutionTransport(new HttpClient(handler), _ => Credentials);
+
+        var truth = await transport.ReconcileEntryAsync("UNI-USDT-SWAP", "entry-client", default);
+
+        Assert.NotNull(truth.Position);
+        Assert.Equal(5.10m, truth.Position!.StopPrice);
+        Assert.Equal("algo-1", truth.Position.StopOrderId);
     }
 
     [Theory]

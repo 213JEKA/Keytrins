@@ -11,6 +11,9 @@ public sealed class RouteReasonCatalogTests
     [InlineData("INVALID_INITIAL_STOP", "Заявка не отправлялась")]
     [InlineData("OKX_1", "общий код OKX 1")]
     [InlineData("FEE_RATE_UNAVAILABLE", "комиссию")]
+    [InlineData("AVAILABLE_MARGIN_UNVERIFIED", "маржу")]
+    [InlineData("INSUFFICIENT_AVAILABLE_MARGIN_PRECHECK", "недостаточно")]
+    [InlineData("POSITION_NOTIONAL_INVALID", "Сумма позиции")]
     public void Known_route_reason_has_actionable_explanation(string reason, string expected)
     {
         Assert.Contains(expected, RouteReasonCatalog.Explain(reason), StringComparison.OrdinalIgnoreCase);

@@ -304,6 +304,7 @@ public partial class MainWindow : Window
         if (!_settingsLoaded || forceValues)
         {
             RiskUsdtInput.Text = runtime.GetProperty("riskUsdt").ToString();
+            PositionNotionalUsdtInput.Text = runtime.GetProperty("positionNotionalUsdt").ToString();
             MaxNetLossUsdtInput.Text = runtime.GetProperty("maxNetLossUsdt").ToString();
             UniverseSizeInput.Text = runtime.GetProperty("universeSize").ToString();
             LeverageInput.Text = runtime.GetProperty("leverage").ToString();
@@ -328,6 +329,7 @@ public partial class MainWindow : Window
     private async void SaveRuntime_Click(object sender, RoutedEventArgs e)
     {
         if (!TryDecimal(RiskUsdtInput.Text, out var risk) ||
+            !TryDecimal(PositionNotionalUsdtInput.Text, out var positionNotionalUsdt) ||
             !TryDecimal(MaxNetLossUsdtInput.Text, out var maxNetLossUsdt) ||
             !int.TryParse(UniverseSizeInput.Text, out var universe) ||
             !int.TryParse(LeverageInput.Text, out var leverage) ||
@@ -337,7 +339,7 @@ public partial class MainWindow : Window
         try
         {
             using var _ = await SendJsonAsync(HttpMethod.Put, "/api/settings/runtime", new
-            { riskUsdt = risk, maxNetLossUsdt, universeSize = universe, leverage, maxNotionalUsdt = maxNotional, maxCostR });
+            { riskUsdt = risk, positionNotionalUsdt, maxNetLossUsdt, universeSize = universe, leverage, maxNotionalUsdt = maxNotional, maxCostR });
             RuntimeSettingsResult.Text = "Сохранено на сервере.";
             await LoadSettingsAsync(true);
         }

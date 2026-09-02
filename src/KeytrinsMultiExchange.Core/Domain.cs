@@ -161,7 +161,7 @@ public sealed record ExchangeSnapshot(
 public sealed class RuntimeSnapshot
 {
     public DateTimeOffset StartedAt { get; } = DateTimeOffset.UtcNow;
-    public string Version { get; init; } = "1.1.10";
+    public string Version { get; init; } = "1.2.0";
     public volatile string MasterHealth = "STARTING";
     public volatile string MasterDetail = "initializing";
     public volatile string? LastSignalId;
@@ -185,10 +185,11 @@ public sealed class RuntimeOptions
     // Environment-controlled only. A quiet order-history window is not proof that a legacy writer is gone.
     public bool OkxExclusiveWriterConfirmed { get; set; }
     public decimal RiskUsdt { get; set; } = 3m;
+    public decimal PositionNotionalUsdt { get; set; } = 100m;
     public int Leverage { get; set; } = 5;
     public decimal MaxNotionalUsdt { get; set; } = 1000m;
     public decimal MaxCostR { get; set; } = 0.25m;
-    public decimal MaxNetLossUsdt { get; set; } = 0.50m;
+    public decimal MaxNetLossUsdt { get; set; } = 1.50m;
     public int UniverseSize { get; set; } = 30;
     public decimal MinTurnoverUsdt { get; set; } = 5_000_000m;
     public int SignalStaleSeconds { get; set; } = 180;

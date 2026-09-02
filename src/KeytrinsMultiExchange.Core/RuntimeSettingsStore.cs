@@ -24,6 +24,11 @@ public sealed class RuntimeSettingsStore
             var persisted = JsonSerializer.Deserialize<RuntimeOptions>(File.ReadAllText(_path), Json);
             if (persisted is not null)
             {
+                // Settings written by v1.1.x do not contain the independently configurable position amount.
+                if (persisted.PositionNotionalUsdt <= 0m)
+                    persisted.PositionNotionalUsdt = defaults.PositionNotionalUsdt > 0m
+                        ? defaults.PositionNotionalUsdt
+                        : 100m;
                 // LIVE admission is never restored from a client-editable settings file.
                 persisted.TradingEnabled = defaults.TradingEnabled;
                 persisted.OkxExclusiveWriterConfirmed = defaults.OkxExclusiveWriterConfirmed;
@@ -34,10 +39,11 @@ public sealed class RuntimeSettingsStore
 
     public RuntimeOptions Current { get { lock (_gate) return Clone(_current); } }
 
-    public RuntimeOptions Update(decimal riskUsdt, int universeSize, int leverage, decimal maxNotionalUsdt,
+    public RuntimeOptions Update(decimal riskUsdt, decimal positionNotionalUsdt, int universeSize, int leverage, decimal maxNotionalUsdt,
         decimal maxCostR, decimal maxNetLossUsdt)
     {
         if (riskUsdt is < 0.10m or > 100m) throw new ArgumentOutOfRangeException(nameof(riskUsdt));
+        if (positionNotionalUsdt is < 10m or > 10_000m) throw new ArgumentOutOfRangeException(nameof(positionNotionalUsdt));
         if (universeSize is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(universeSize));
         if (leverage is < 1 or > 20) throw new ArgumentOutOfRangeException(nameof(leverage));
         if (maxNotionalUsdt is < 10m or > 10_000m) throw new ArgumentOutOfRangeException(nameof(maxNotionalUsdt));
@@ -46,7 +52,8 @@ public sealed class RuntimeSettingsStore
         lock (_gate)
         {
             var next = Clone(_current);
-            next.RiskUsdt = riskUsdt; next.UniverseSize = universeSize; next.Leverage = leverage;
+            next.RiskUsdt = riskUsdt; next.PositionNotionalUsdt = positionNotionalUsdt;
+            next.UniverseSize = universeSize; next.Leverage = leverage;
             next.MaxNotionalUsdt = maxNotionalUsdt; next.MaxCostR = maxCostR;
             next.MaxNetLossUsdt = maxNetLossUsdt;
             _current = next; SaveLocked(); return Clone(_current);
@@ -73,7 +80,7 @@ public sealed class RuntimeSettingsStore
     {
         TradingEnabled = value.TradingEnabled,
         OkxExclusiveWriterConfirmed = value.OkxExclusiveWriterConfirmed,
-        RiskUsdt = value.RiskUsdt, Leverage = value.Leverage,
+        RiskUsdt = value.RiskUsdt, PositionNotionalUsdt = value.PositionNotionalUsdt, Leverage = value.Leverage,
         MaxNotionalUsdt = value.MaxNotionalUsdt, MaxCostR = value.MaxCostR,
         MaxNetLossUsdt = value.MaxNetLossUsdt, UniverseSize = value.UniverseSize,
         MinTurnoverUsdt = value.MinTurnoverUsdt, SignalStaleSeconds = value.SignalStaleSeconds,

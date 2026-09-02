@@ -190,7 +190,7 @@ app.MapGet("/api/settings", (RuntimeSettingsStore settings, CredentialVault vaul
 }));
 app.MapPut("/api/settings/runtime", (RuntimeSettingsRequest request, RuntimeSettingsStore settings) =>
 {
-    try { return Results.Ok(settings.Update(request.RiskUsdt, request.UniverseSize, request.Leverage,
+    try { return Results.Ok(settings.Update(request.RiskUsdt, request.PositionNotionalUsdt, request.UniverseSize, request.Leverage,
         request.MaxNotionalUsdt, request.MaxCostR, request.MaxNetLossUsdt)); }
     catch (ArgumentOutOfRangeException exception) { return Results.BadRequest(new { reason = "INVALID_SETTING", field = exception.ParamName }); }
 });
@@ -334,7 +334,7 @@ static class Control
     }
 }
 
-sealed record RuntimeSettingsRequest(decimal RiskUsdt, int UniverseSize, int Leverage, decimal MaxNotionalUsdt,
+sealed record RuntimeSettingsRequest(decimal RiskUsdt, decimal PositionNotionalUsdt, int UniverseSize, int Leverage, decimal MaxNotionalUsdt,
     decimal MaxCostR, decimal MaxNetLossUsdt);
 sealed record CredentialRequest(string ApiKey, string ApiSecret, string? Passphrase);
 sealed record ExchangeSelectionRequest(string[] Exchanges);

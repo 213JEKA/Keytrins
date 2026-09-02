@@ -3,6 +3,15 @@ namespace KeytrinsMultiExchange.Core;
 public enum MutationDisposition { Accepted, Rejected, Ambiguous }
 public enum ExchangeOrderState { Missing, Open, PartiallyFilled, Filled, Rejected, Cancelled, Unknown }
 
+public sealed record CanonicalTradeIntent(
+    CanonicalSignal Signal,
+    RuntimeOptions ExecutionPolicy,
+    DateTimeOffset CreatedAt);
+
+public sealed record ExchangeTradeTask(
+    ExchangeId Exchange,
+    CanonicalTradeIntent Intent);
+
 public sealed record PreparedEntry(
     ExchangeId Exchange,
     string SignalId,

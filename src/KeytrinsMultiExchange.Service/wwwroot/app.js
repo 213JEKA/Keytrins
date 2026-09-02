@@ -258,6 +258,7 @@ async function loadSettings(force = false) {
     const settings = await api('/api/settings');
     if (!settingsLoaded || force) {
       $('#riskUsdt').value = settings.runtime.riskUsdt;
+      $('#positionNotionalUsdt').value = settings.runtime.positionNotionalUsdt;
       $('#maxNetLossUsdt').value = settings.runtime.maxNetLossUsdt;
       $('#universeSize').value = settings.runtime.universeSize;
       $('#leverage').value = settings.runtime.leverage;
@@ -274,6 +275,7 @@ async function loadSettings(force = false) {
 $('#saveRuntime').onclick = async () => {
   const body = {
     riskUsdt: Number($('#riskUsdt').value),
+    positionNotionalUsdt: Number($('#positionNotionalUsdt').value),
     maxNetLossUsdt: Number($('#maxNetLossUsdt').value),
     universeSize: Number($('#universeSize').value),
     leverage: Number($('#leverage').value),

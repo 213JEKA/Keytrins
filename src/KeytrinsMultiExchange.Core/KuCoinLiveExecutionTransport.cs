@@ -16,7 +16,7 @@ public sealed class KuCoinLiveExecutionTransport(HttpClient http, Func<ExchangeI
     public async Task<PreparedEntry> PrepareEntryAsync(CanonicalSignal signal, RuntimeOptions options,
         CancellationToken cancellationToken)
     {
-        var symbol = signal.Symbol.Split('-')[0] + "USDTM";
+        var symbol = ExchangeSymbolMapper.Map(Id, signal.Symbol);
         using var positionsDocument = await PrivateGetAsync("/api/v1/positions?currency=USDT", cancellationToken);
         var allPositions = positionsDocument.RootElement.GetProperty("data");
         if (allPositions.ValueKind == JsonValueKind.Array && allPositions.EnumerateArray().Any(x =>
@@ -45,7 +45,11 @@ public sealed class KuCoinLiveExecutionTransport(HttpClient http, Func<ExchangeI
 
         using var feeDocument = await PrivateGetAsync("/api/v1/trade-fees?symbol=" + Escape(symbol), cancellationToken);
         var fee = Math.Abs(Decimal(feeDocument.RootElement.GetProperty("data"), "takerFeeRate"));
-        return EntryPlanner.Plan(Id, signal, symbol, quote, rules, fee, options);
+        var entry = EntryPlanner.Plan(Id, signal, symbol, quote, rules, fee, options);
+        using var balanceDocument = await PrivateGetAsync("/api/v1/account-overview?currency=USDT", cancellationToken);
+        var available = Decimal(balanceDocument.RootElement.GetProperty("data"), "availableBalance");
+        ExecutionBudget.RequireAvailableMargin(entry, options, available);
+        return entry;
     }
 
     public async Task<MutationReceipt> SubmitEntryAsync(PreparedEntry entry, CancellationToken cancellationToken)
@@ -79,7 +83,9 @@ public sealed class KuCoinLiveExecutionTransport(HttpClient http, Func<ExchangeI
             order = new(state, orderId, clientOrderId, Decimal(item, "filledSize"), Decimal(item, "avgDealPrice"), fee, status);
         }
         catch (ExchangeApiException exception) when (exception.Code.Contains("404", StringComparison.OrdinalIgnoreCase) ||
-                                                      exception.Code.Contains("300004", StringComparison.OrdinalIgnoreCase))
+                                                      exception.Code.Contains("300004", StringComparison.OrdinalIgnoreCase) ||
+                                                      exception.Code.Contains("100001", StringComparison.OrdinalIgnoreCase) &&
+                                                      (exception.Detail?.Contains("orderNotExist", StringComparison.OrdinalIgnoreCase) ?? false))
         { order = new(ExchangeOrderState.Missing, null, clientOrderId, 0, 0, 0, "ORDER_NOT_FOUND"); }
         var position = await GetPositionAsync(symbol, cancellationToken);
         return new(order, position);

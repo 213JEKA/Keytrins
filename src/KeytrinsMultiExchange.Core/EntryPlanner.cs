@@ -18,8 +18,9 @@ public static class EntryPlanner
 
         var direction = signal.ActualDirection;
         var referencePrice = direction == TradeDirection.Long ? quote.Ask : quote.Bid;
-        var targetRiskDistance = referencePrice * (decimal)signal.OkxRiskDistancePct;
-        var desiredBaseQuantity = options.RiskUsdt / targetRiskDistance;
+        var requestedNotional = options.PositionNotionalUsdt;
+        if (requestedNotional <= 0m) throw new ExecutionRejectedException("POSITION_NOTIONAL_INVALID");
+        var desiredBaseQuantity = requestedNotional / referencePrice;
         var desiredContracts = desiredBaseQuantity / rules.ContractValue;
         var quantity = FloorToStep(desiredContracts, rules.QtyStep);
         if (quantity < rules.MinQty || quantity <= 0) throw new ExecutionRejectedException("QTY_MIN");
@@ -32,7 +33,7 @@ public static class EntryPlanner
 
         var spread = quote.Ask - quote.Bid;
         var estimatedRoundTripCost = notional * takerFeeRate * 2m + spread * baseQuantity;
-        var costR = estimatedRoundTripCost / options.RiskUsdt;
+        var costR = estimatedRoundTripCost / Math.Abs(options.MaxNetLossUsdt);
         if (costR > options.MaxCostR) throw new ExecutionRejectedException("COST_R");
 
         var mirroredRaw = direction == TradeDirection.Long

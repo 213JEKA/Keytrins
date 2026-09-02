@@ -55,7 +55,7 @@ public abstract class ReadOnlyGuardedAdapter : IExchangeAdapter
     protected ReadOnlyGuardedAdapter(HttpClient http, Func<ExchangeId, ExchangeCredentials> credentials) { _http = http; _credentials = credentials; }
     public abstract ExchangeId Id { get; }
     protected abstract string PublicProbeUrl { get; }
-    public virtual string MapOkxSymbol(string okxInstrumentId) => okxInstrumentId.Replace("-", "", StringComparison.OrdinalIgnoreCase).Replace("SWAP", "", StringComparison.OrdinalIgnoreCase);
+    public virtual string MapOkxSymbol(string okxInstrumentId) => ExchangeSymbolMapper.Map(Id, okxInstrumentId);
 
     public virtual async Task<ExchangeSnapshot> ReadOnlyPreflightAsync(ExchangeMode requestedMode, CancellationToken cancellationToken)
     {
@@ -101,7 +101,7 @@ public sealed class OkxExchangeAdapter : ReadOnlyGuardedAdapter
     public OkxExchangeAdapter(HttpClient http, Func<ExchangeId, ExchangeCredentials> credentials) : base(http, credentials) => _http = http;
     public override ExchangeId Id => ExchangeId.Okx;
     protected override string PublicProbeUrl => "https://www.okx.com/api/v5/public/time";
-    public override string MapOkxSymbol(string okxInstrumentId) => okxInstrumentId;
+    public override string MapOkxSymbol(string okxInstrumentId) => ExchangeSymbolMapper.Map(Id, okxInstrumentId);
 
     protected override async Task<CredentialAudit> AuditCredentialsAsync(CancellationToken cancellationToken)
     {
@@ -256,7 +256,7 @@ public sealed class KuCoinExchangeAdapter : ReadOnlyGuardedAdapter
     public KuCoinExchangeAdapter(HttpClient http, Func<ExchangeId, ExchangeCredentials> credentials) : base(http, credentials) => _http = http;
     public override ExchangeId Id => ExchangeId.KuCoinFutures;
     protected override string PublicProbeUrl => "https://api-futures.kucoin.com/api/v1/timestamp";
-    public override string MapOkxSymbol(string okxInstrumentId) => okxInstrumentId.Split('-')[0] + "USDTM";
+    public override string MapOkxSymbol(string okxInstrumentId) => ExchangeSymbolMapper.Map(Id, okxInstrumentId);
 
     protected override async Task<CredentialAudit> AuditCredentialsAsync(CancellationToken cancellationToken)
     {
